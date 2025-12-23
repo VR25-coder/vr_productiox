@@ -1,0 +1,682 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vrutant - Video Editor Portfolio</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+</head>
+<body>
+    <canvas id="ambient-canvas" class="ambient-canvas" aria-hidden="true"></canvas>
+    <div class="spotlight" aria-hidden="true"></div>
+    <div class="scanlines" aria-hidden="true"></div>
+    <!-- Header Navigation -->
+    <header class="header">
+        <nav class="nav">
+            <div class="nav-brand">
+                <a class="brand-link" href="/" aria-label="Home">
+                    <img id="brand-logo" class="brand-logo" src="/logo.jpg" alt="Portfolio logo" />
+                </a>
+            </div>
+            <ul class="nav-menu">
+                <li><a href="#about">About</a></li>
+                <li><a href="#experience">Experience</a></li>
+                <li><a href="#projects">Projects</a></li>
+                <li><a href="#contact">Contact</a></li>
+            </ul>
+        </nav>
+    </header>
+
+    <!-- Hero Section -->
+    <section class="hero">
+        <div class="hero-content">
+            <div class="hero-left">
+                <div class="availability-status">
+                    <div class="status-dot"></div>
+                    <span>Available for Projects</span>
+                </div>
+                <h2 class="hero-title">
+                    Capturing the Moments<br>
+                    That Captures your heart.
+                </h2>
+                <p class="hero-description">
+                    Professional Video editor with 6+ years of experience creating compelling content for commercials, documentaries and digital media. Lets bring your vision to life.
+                </p>
+                <div class="hero-buttons">
+                    <button class="btn-primary" type="button">
+                        <span class="play-icon">▶</span>
+                        View Reel
+                    </button>
+                    <button class="btn-secondary" type="button">
+                        <span class="download-icon">⬇</span>
+                        Download Resume
+                    </button>
+                </div>
+            </div>
+            <div class="hero-right">
+                <div class="hero-video-placeholder"></div>
+            </div>
+        </div>
+    </section>
+
+
+    <!-- Stats and Technical Expertise Section -->
+    <section class="stats-tech-section">
+        <div class="stats-tech-container">
+            <!-- Stats on Left -->
+            <div class="stats-left">
+                <div class="stats-grid-left">
+                    <div class="stat-item-left">
+                        <div class="stat-icon-left stat-icon-blue">
+                            <span>📁</span>
+                        </div>
+                        <div class="stat-number-left">50+</div>
+                        <div class="stat-label-left">Projects Completed</div>
+                    </div>
+                    <div class="stat-item-left">
+                        <div class="stat-icon-left stat-icon-green">
+                            <span>🕒</span>
+                        </div>
+                        <div class="stat-number-left">5+</div>
+                        <div class="stat-label-left">Years Experience</div>
+                    </div>
+                    <div class="stat-item-left">
+                        <div class="stat-icon-left stat-icon-purple">
+                            <span>🎬</span>
+                        </div>
+                        <div class="stat-number-left">25+</div>
+                        <div class="stat-label-left">Happy Clients</div>
+                    </div>
+                    <div class="stat-item-left">
+                        <div class="stat-icon-left stat-icon-orange">
+                            <span>🏆</span>
+                        </div>
+                        <div class="stat-number-left">3+</div>
+                        <div class="stat-label-left">Awards Won</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Technical Expertise on Right -->
+            <div class="tech-expertise-right">
+                <h3 class="tech-section-title">
+                    <span class="gear-icon">⚙</span>
+                    Technical Expertise
+                </h3>
+                <div class="tech-skills-list">
+                    <div class="tech-skill-item">
+                        <div class="tech-skill-header">
+                            <span class="tech-skill-name">Premiere Pro</span>
+                            <span class="tech-skill-percentage">90%</span>
+                        </div>
+                        <div class="tech-skill-bar">
+                            <div class="tech-skill-progress tech-skill-purple" data-progress="90"></div>
+                        </div>
+                    </div>
+                    <div class="tech-skill-item">
+                        <div class="tech-skill-header">
+                            <span class="tech-skill-name">After Effects</span>
+                            <span class="tech-skill-percentage">50%</span>
+                        </div>
+                        <div class="tech-skill-bar">
+                            <div class="tech-skill-progress tech-skill-blue" data-progress="50"></div>
+                        </div>
+                    </div>
+                    <div class="tech-skill-item">
+                        <div class="tech-skill-header">
+                            <span class="tech-skill-name">DaVinci Resolve</span>
+                            <span class="tech-skill-percentage">65%</span>
+                        </div>
+                        <div class="tech-skill-bar">
+                            <div class="tech-skill-progress tech-skill-orange" data-progress="65"></div>
+                        </div>
+                    </div>
+                    <div class="tech-skill-item">
+                        <div class="tech-skill-header">
+                            <span class="tech-skill-name">Final Cut Pro</span>
+                            <span class="tech-skill-percentage">70%</span>
+                        </div>
+                        <div class="tech-skill-bar">
+                            <div class="tech-skill-progress tech-skill-green" data-progress="70"></div>
+                        </div>
+                    </div>
+                    <div class="tech-skill-item">
+                        <div class="tech-skill-header">
+                            <span class="tech-skill-name">CapCut</span>
+                            <span class="tech-skill-percentage">85%</span>
+                        </div>
+                        <div class="tech-skill-bar">
+                            <div class="tech-skill-progress tech-skill-yellow" data-progress="85"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Services Row Below -->
+        <div class="services-row">
+            <div class="service-item-inline" style="cursor: pointer;">
+                <div class="service-icon-inline">🎬</div>
+                <div class="service-content-inline">
+                    <h4 class="service-title-inline">Commercial Editing</h4>
+                    <p class="service-desc-inline">Hospital ad - Click to watch professional commercial video editing</p>
+                </div>
+            </div>
+            <div class="service-item-inline" style="cursor: pointer;">
+                <div class="service-icon-inline">🎥</div>
+                <div class="service-content-inline">
+                    <h4 class="service-title-inline">Documentary Films</h4>
+                    <p class="service-desc-inline">Compelling documentary storytelling - Click to watch on YouTube</p>
+                </div>
+            </div>
+            <div class="service-item-inline" style="cursor: pointer;">
+                <div class="service-icon-inline">📵</div>
+                <div class="service-content-inline">
+                    <h4 class="service-title-inline">Music Video</h4>
+                    <p class="service-desc-inline">Professional music video production - Click to watch on YouTube</p>
+                </div>
+            </div>
+            <div class="service-item-inline" style="cursor: pointer;">
+                <div class="service-icon-inline">🎞</div>
+                <div class="service-content-inline">
+                    <h4 class="service-title-inline">Digital Content</h4>
+                    <p class="service-desc-inline">Instagram reel content creation - Click to watch on Instagram</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+
+    <!-- About Me Section -->
+    <section id="about" class="about">
+        <div class="about-container">
+            <div class="about-content">
+                <div class="about-text">
+                    <h2 class="about-title">About Me</h2>
+                    <p class="about-intro">I am a freelance cinematographer and video editor, passionate about creating powerful visual stories that connect with audiences. From concept development and shooting supervision to editing, color grading, motion graphics, and finishing, I specialize in transforming raw footage into compelling narratives.</p>
+                    <p class="about-description">I've worked on diverse projects, blending artistic storytelling with technical precision, and I believe every frame has the power to leave a lasting impact. Alongside my creative work, I am also pursuing my B.Tech in Computer Science at G.H. Raisoni College of Engineering (GHRCE), with a growing interest in cybersecurity, ethical hacking, and system administration. Currently, I'm gaining hands-on experience in content creation and video production through my part-time role at Entrance Zone (Vatsala Academic).</p>
+                    
+                    <div class="skill-tags">
+                        <span class="skill-tag">Premiere Pro</span>
+                        <span class="skill-tag">After Effects</span>
+                        <span class="skill-tag">Final Cut Pro</span>
+                        <span class="skill-tag">CapCut</span>
+                        <span class="skill-tag">Color Grading</span>
+                    </div>
+                </div>
+                <div class="about-images">
+                    <div class="about-image-main"></div>
+                    <div class="about-image-small"></div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Professional Journey Section -->
+    <section id="experience" class="professional-journey">
+        <div class="journey-container">
+            <h2 class="journey-title">Professional Journey</h2>
+            <p class="journey-subtitle">Five years of crafting compelling visual stories across industries, from start-ups to fortune 500 companies.</p>
+            
+            <!-- Upper container: core professional journey cards laid out in columns -->
+            <div class="journey-upper-grid">
+                <!-- Current Position -->
+                <div class="dashboard-card current-position">
+                    <h3 class="card-title">Current Position</h3>
+                    <div class="position-info">
+                        <h4 class="role">Video Editor</h4>
+                        <p class="company">Entrance Zone (Vatsala Academic)</p>
+                        <p class="duration">2023 – Present</p>
+                        <p class="location">Nagpur, Maharashtra, India</p>
+                    </div>
+                    <div class="position-tags">
+                        <span class="position-tag">Content Creation</span>
+                        <span class="position-tag">Video Production</span>
+                        <span class="position-tag">Educational Content</span>
+                    </div>
+                    <div class="top-skills">
+                        <h4 class="skills-title">Top Skills</h4>
+                        <div class="skill-bar-item">
+                            <span class="skill-name">Commercial Editing — 90%</span>
+                            <div class="skill-bar">
+                                <div class="skill-progress" data-progress="90"></div>
+                            </div>
+                        </div>
+                        <div class="skill-bar-item">
+                            <span class="skill-name">Documentary — 90%</span>
+                            <div class="skill-bar">
+                                <div class="skill-progress" data-progress="90"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Key Metrics -->
+                <div class="dashboard-card key-metrics">
+                    <h3 class="card-title">Key Metrics</h3>
+                    <div class="metrics-list">
+                        <div class="metric-row">
+                            <div class="metric-icon blue-icon">●</div>
+                            <span class="metric-text">100+ Projects Delivered</span>
+                        </div>
+                        <div class="metric-row">
+                            <div class="metric-icon purple-icon">●</div>
+                            <span class="metric-text">25+ Happy Clients</span>
+                        </div>
+                        <div class="metric-row">
+                            <div class="metric-icon orange-icon">●</div>
+                            <span class="metric-text">Awards: 3+</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Gears -->
+                <div class="dashboard-card gears-card">
+                    <h3 class="card-title">Gears</h3>
+                    <div class="gears-groups">
+                        <div class="gears-group">
+                            <h4 class="gears-heading">Camera</h4>
+                            <ul class="gears-list">
+                                <li>Sony ZV-E10</li>
+                                <li>Sony Alpha 6700</li>
+                            </ul>
+                        </div>
+                        <div class="gears-group">
+                            <h4 class="gears-heading">Mobile</h4>
+                            <ul class="gears-list">
+                                <li>iPhone 15</li>
+                                <li>Samsung S24</li>
+                            </ul>
+                        </div>
+                        <div class="gears-group">
+                            <h4 class="gears-heading">Gimbal</h4>
+                            <ul class="gears-list">
+                                <li>DJI Osmo SE</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Career Journey -->
+                <div class="dashboard-card career-journey">
+                    <h3 class="card-title">Career Journey</h3>
+                    <div class="timeline-list">
+                        <div class="timeline-entry">
+                            <span class="timeline-text">Video Editor — Entrance Zone (Vatsala Academic) — 2023–Present</span>
+                        </div>
+                        <div class="timeline-entry">
+                            <span class="timeline-text">Freelance Video Editor & Cinematographer — 2021–Present</span>
+                        </div>
+                        <div class="timeline-entry">
+                            <span class="timeline-text">Student — G.H. Raisoni College of Engineering (GHRCE) — B.Tech Computer Science — 2022–Present</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Project Portfolio Breakdown -->
+                <div class="dashboard-card project-breakdown">
+                    <h3 class="card-title">Project Portfolio Breakdown</h3>
+                    <div class="project-bars">
+                        <!-- Left column: Commercials -->
+                        <div class="project-bar-item">
+                            <div class="project-bar blue-bar">
+                                <div class="project-fill" data-width="100"></div>
+                            </div>
+                            <div class="project-labels">
+                                <span class="project-name">Commercials</span>
+                                <span class="project-count">15 Projects</span>
+                            </div>
+                        </div>
+                        <!-- Right column: Music Video -->
+                        <div class="project-bar-item">
+                            <div class="project-bar purple-bar">
+                                <div class="project-fill" data-width="100"></div>
+                            </div>
+                            <div class="project-labels">
+                                <span class="project-name">Music Video</span>
+                                <span class="project-count">15 Projects</span>
+                            </div>
+                        </div>
+                        <!-- Left column: Documentaries -->
+                        <div class="project-bar-item">
+                            <div class="project-bar green-bar">
+                                <div class="project-fill" data-width="100"></div>
+                            </div>
+                            <div class="project-labels">
+                                <span class="project-name">Documentaries</span>
+                                <span class="project-count">15 Projects</span>
+                            </div>
+                        </div>
+                        <!-- Right column: Corporate -->
+                        <div class="project-bar-item">
+                            <div class="project-bar orange-bar">
+                                <div class="project-fill" data-width="100"></div>
+                            </div>
+                            <div class="project-labels">
+                                <span class="project-name">Corporate</span>
+                                <span class="project-count">15 Projects</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Latest Recognition -->
+                <div class="dashboard-card latest-recognition">
+                    <h3 class="card-title">Latest Recognition</h3>
+                    <div class="recognition-list">
+                        <div class="recognition-item">
+                            <div class="recognition-icon">🏆</div>
+                            <div class="recognition-content">
+                                <h4 class="recognition-title">Best Video Edit</h4>
+                                <p class="recognition-event">Video Award 2025</p>
+                            </div>
+                        </div>
+                        <div class="recognition-item">
+                            <div class="recognition-icon">⭐</div>
+                            <div class="recognition-content">
+                                <h4 class="recognition-title">Best Video Edit</h4>
+                                <p class="recognition-event">Video Award 2024</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tech Stack -->
+                <div class="dashboard-card tech-stack">
+                    <h3 class="card-title">🎬 Tech Stack</h3>
+                    <div class="tech-tools-grid">
+                        <div class="tech-tool">
+                            <span class="tech-tool-name">Premiere Pro</span>
+                        </div>
+                        <div class="tech-tool">
+                            <span class="tech-tool-name">After Effects</span>
+                        </div>
+                        <div class="tech-tool">
+                            <span class="tech-tool-name">DaVinci Resolve</span>
+                        </div>
+                        <div class="tech-tool">
+                            <span class="tech-tool-name">Final Cut Pro</span>
+                        </div>
+                        <div class="tech-tool">
+                            <span class="tech-tool-name">CapCut</span>
+                        </div>
+                        <div class="tech-tool">
+                            <span class="tech-tool-name">Photoshop</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Lower container: client success highlights laid out row-wise -->
+            <div class="journey-lower-list">
+                <h3 class="card-title">Clients Success Highlight</h3>
+                <div class="client-highlights-list">
+                    <!-- Fallback static cards (will be overridden by JSON data when available) -->
+                    <article class="client-highlight-card">
+                        <div class="client-highlight-main">
+                            <div class="testimonial-quote">“</div>
+                            <p class="testimonial-text">Vrutant transformed our vision into reality with exceptional and technical expertise. The commercial campaign exceeded our expectations and drove a 40% increase in engagement.</p>
+                            <p class="testimonial-author">– Edit Client 01 · Client</p>
+                        </div>
+                        <div class="client-highlight-meta">
+                            <p class="client-highlight-label">Verified project</p>
+                        </div>
+                    </article>
+
+                    <article class="client-highlight-card">
+                        <div class="client-highlight-main">
+                            <div class="testimonial-quote">“</div>
+                            <p class="testimonial-text">Working with Vrutant was smooth and professional from start to finish. The final video quality was outstanding.</p>
+                            <p class="testimonial-author">– Edit Client 02 · Client</p>
+                        </div>
+                        <div class="client-highlight-meta">
+                            <p class="client-highlight-label">Verified project</p>
+                        </div>
+                    </article>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Projects Section -->
+    <section id="projects" class="projects">
+        <div class="projects-container">
+            <h2 class="projects-title">Professional Journey</h2>
+            <p class="projects-subtitle">6 key years of commercial creative work includes film-grade TV commercials</p>
+            
+            <div class="projects-grid">
+                <div class="project-card">
+                    <div class="project-thumbnail">
+                        <div class="play-button">
+                            <span>▶</span>
+                        </div>
+                    </div>
+                    <div class="project-info">
+                        <h4 class="project-title">Real Information Commercial</h4>
+                        <p class="project-description">Lorem ipsum dolor sit amet consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.</p>
+                        <div class="project-stats">
+                            <div class="stat">
+                                <span class="stat-icon">👁</span>
+                                <span>50 View</span>
+                            </div>
+                            <div class="stat">
+                                <span class="stat-icon">💖</span>
+                                <span>Like Share</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="project-card">
+                    <div class="project-thumbnail">
+                        <div class="play-button">
+                            <span>▶</span>
+                        </div>
+                    </div>
+                    <div class="project-info">
+                        <h4 class="project-title">Climate Change Documentary</h4>
+                        <p class="project-description">Lorem ipsum dolor sit amet consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.</p>
+                        <div class="project-stats">
+                            <div class="stat">
+                                <span class="stat-icon">👁</span>
+                                <span>50 View</span>
+                            </div>
+                            <div class="stat">
+                                <span class="stat-icon">💖</span>
+                                <span>Like Share</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="project-card">
+                    <div class="project-thumbnail">
+                        <div class="play-button">
+                            <span>▶</span>
+                        </div>
+                    </div>
+                    <div class="project-info">
+                        <h4 class="project-title">Juice Social Media Video</h4>
+                        <p class="project-description">Lorem ipsum dolor sit amet consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.</p>
+                        <div class="project-stats">
+                            <div class="stat">
+                                <span class="stat-icon">👁</span>
+                                <span>50 View</span>
+                            </div>
+                            <div class="stat">
+                                <span class="stat-icon">💖</span>
+                                <span>Like Share</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="project-card">
+                    <div class="project-thumbnail">
+                        <div class="play-button">
+                            <span>▶</span>
+                        </div>
+                    </div>
+                    <div class="project-info">
+                        <h4 class="project-title">Real Information Commercial</h4>
+                        <p class="project-description">Lorem ipsum dolor sit amet consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.</p>
+                        <div class="project-stats">
+                            <div class="stat">
+                                <span class="stat-icon">👁</span>
+                                <span>50 View</span>
+                            </div>
+                            <div class="stat">
+                                <span class="stat-icon">💖</span>
+                                <span>Like Share</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="project-card">
+                    <div class="project-thumbnail">
+                        <div class="play-button">
+                            <span>▶</span>
+                        </div>
+                    </div>
+                    <div class="project-info">
+                        <h4 class="project-title">Climate Change Documentary</h4>
+                        <p class="project-description">Lorem ipsum dolor sit amet consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.</p>
+                        <div class="project-stats">
+                            <div class="stat">
+                                <span class="stat-icon">👁</span>
+                                <span>50 View</span>
+                            </div>
+                            <div class="stat">
+                                <span class="stat-icon">💖</span>
+                                <span>Like Share</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="project-card">
+                    <div class="project-thumbnail">
+                        <div class="play-button">
+                            <span>▶</span>
+                        </div>
+                    </div>
+                    <div class="project-info">
+                        <h4 class="project-title">Juice Social Media Video</h4>
+                        <p class="project-description">Lorem ipsum dolor sit amet consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.</p>
+                        <div class="project-stats">
+                            <div class="stat">
+                                <span class="stat-icon">👁</span>
+                                <span>50 View</span>
+                            </div>
+                            <div class="stat">
+                                <span class="stat-icon">💖</span>
+                                <span>Like Share</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Contact Section -->
+    <section id="contact" class="contact">
+        <div class="contact-container">
+            <h2 class="contact-title">Let's Work Together</h2>
+            <p class="contact-subtitle">Ready to bring your vision to life? I'm currently available for freelance projects and would love to discuss your video editing needs.</p>
+            
+            <div class="contact-content">
+                <div class="contact-info">
+                    <h3>Get In Touch</h3>
+                    <p>Whether you have a specific project in mind or just want to brainstorm ideas, I'd love to hear from you. Let's create something amazing together.</p>
+                    
+                    <div class="contact-details">
+                        <div class="contact-item">
+                            <span class="contact-icon">📧</span>
+                            <div>
+                                <span class="contact-label">Email</span>
+                                <span class="contact-value">vrutant@example.com</span>
+                            </div>
+                        </div>
+                        <div class="contact-item">
+                            <span class="contact-icon">📱</span>
+                            <div>
+                                <span class="contact-label">Phone</span>
+                                <span class="contact-value">+1 (555) 123-4567</span>
+                            </div>
+                        </div>
+                        <div class="contact-item">
+                            <span class="contact-icon">📍</span>
+                            <div>
+                                <span class="contact-label">Location</span>
+                                <span class="contact-value">Available Worldwide</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <h4 class="social-heading">Follow Me</h4>
+                    <div class="social-links">
+                        <a href="#" class="social-link" aria-label="LinkedIn">
+                            <span>in</span>
+                        </a>
+                        <a href="#" class="social-link" aria-label="Instagram">
+                            <span>ig</span>
+                        </a>
+                        <a href="#" class="social-link" aria-label="Facebook">
+                            <span>f</span>
+                        </a>
+                    </div>
+                </div>
+
+                <div class="contact-form-container">
+                    <form class="contact-form">
+                        <div class="form-row two-col">
+                            <div class="form-group">
+                                <label for="first_name">First Name</label>
+                                <input type="text" id="first_name" name="first_name" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="last_name">Last Name</label>
+                                <input type="text" id="last_name" name="last_name" required>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="email">Email</label>
+                            <input type="email" id="email" name="email" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="subject">Subject</label>
+                            <input type="text" id="subject" name="subject" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="message">Message</label>
+                            <textarea id="message" name="message" rows="5" required></textarea>
+                        </div>
+                        <button type="submit" class="submit-btn">Send Message</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="footer-container">
+            <div class="footer-content">
+                <div class="footer-left">
+                    <h3>Vrutant</h3>
+                    <p>Video Editor</p>
+                </div>
+                <div class="footer-right">
+                    <p>&copy; 2024 Vrutant. All rights reserved.</p>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <script src="ambient.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>

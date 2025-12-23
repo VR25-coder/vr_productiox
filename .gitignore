@@ -1,0 +1,28 @@
+# dependencies
+node_modules/
+
+# env files
+.env
+.env.*
+!.env.example
+
+# logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+logs/
+*.log
+
+# runtime data
+uploads/
+
+# data: keep portfolio content but ignore messages/invoices (contain personal data)
+data/*.json
+data/*.bak
+!data/portfolio_data.json
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

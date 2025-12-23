@@ -23,7 +23,7 @@
   },
   "personal": {
     "availability": "Available for Projects",
-    "title": "Capturing the Moments\nThat Capture Your Heart.",
+    "title": "Capturing the Moments\nThat Capture Your Heart",
     "description": "Professional Video editor with 6+ years of experience creating compelling content."
   },
   "hero": {
@@ -111,7 +111,9 @@
     "awards": "Awards: 3+"
   },
   "career": [
-    "Video Editor — Entrance Zone (Vatsala Academic) — 2023–Present\\nFreelance Video Editor & Cinematographer — 2021–Present\\nStudent — G.H. Raisoni College of Engineering (GHRCE) — B.Tech Computer Science — 2022–Present"
+    "Video Editor — Entrance Zone (Vatsala Academic) — 2023–Present",
+    "Freelance Video Editor & Cinematographer — 2021–Present",
+    "Student — G.H. Raisoni College of Engineering (GHRCE) — B.Tech Computer Science — 2022–Present"
   ],
   "techStack": [
     "Premiere Pro",
@@ -125,12 +127,16 @@
     {
       "icon": "🏆",
       "title": "Best Video Edit",
-      "event": "Video Award 2025"
+      "event": "Video Award 2025",
+      "imageUrl": "",
+      "link": ""
     },
     {
       "icon": "⭐",
       "title": "Best Video Edit",
-      "event": "Video Award 2024"
+      "event": "Video Award 2024",
+      "imageUrl": "",
+      "link": ""
     }
   ],
   "testimonials": [
@@ -143,6 +149,24 @@
       "author": "Edit Client 02"
     }
   ],
+  "clientHighlights": [
+    {
+      "title": "Clients Success Highlight",
+      "commentText": "Vrutant transformed our vision into reality with exceptional and technical expertise. The commercial campaign exceeded our expectations and drove a 40% increase in engagement.",
+      "commentAuthor": "Edit Client 01",
+      "platform": "Client",
+      "postUrl": "",
+      "thumbnail": ""
+    },
+    {
+      "title": "Clients Success Highlight",
+      "commentText": "Working with Vrutant was smooth and professional from start to finish. The final video quality was outstanding.",
+      "commentAuthor": "Edit Client 02",
+      "platform": "Client",
+      "postUrl": "",
+      "thumbnail": ""
+    }
+  ],
   "projects": [
     {
       "title": "Real Information Commercial",
@@ -150,7 +174,8 @@
       "type": "link",
       "views": "50 View",
       "engagement": "Like Share",
-      "link": ""
+      "link": "https://www.instagram.com/p/C3nNk8sPXmk/?utm_source=ig_web_copy_link&igsh=MzRlODBiNWFlZA==",
+      "thumbnail": "https://www.instagram.com/p/C3nNk8sPXmk/?utm_source=ig_web_copy_link"
     },
     {
       "title": "Climate Change Documentary",
@@ -158,39 +183,36 @@
       "type": "link",
       "views": "50 View",
       "engagement": "Like Share",
-      "link": ""
+      "link": "https://www.instagram.com/reel/DQeYPcsjCWz/?utm_source=ig_web_copy_link&igsh=MzRlODBiNWFlZA==",
+      "thumbnail": "https://www.bing.com/images/search?view=detailV2&ccid=RBtjTUnU&id=8EB7B3EE7AB0673B5DE19883CCE84B9391371999&thid=OIP.RBtjTUnUeAB0ANg3jB_yQgHaE8&mediaurl=https%3a%2f%2fwww.imgacademy.com%2fsites%2fdefault%2ffiles%2fimg-academy-imgplus.jpg&exph=1667&expw=2500&q=img&FORM=IRPRST&ck=70EBD5781739442E67B1BBE4FEA475A7&selectedIndex=4&itb=0"
     },
     {
       "title": "Juice Social Media Video",
       "description": "Social media campaign for a juice brand.",
       "type": "link",
       "views": "50 View",
-      "engagement": "Like Share",
-      "link": ""
+      "engagement": "Like Share"
     },
     {
       "title": "Real Information Commercial",
       "description": "High‑impact TV commercial edit.",
       "type": "link",
       "views": "50 View",
-      "engagement": "Like Share",
-      "link": ""
+      "engagement": "Like Share"
     },
     {
       "title": "Climate Change Documentary",
       "description": "Awareness documentary piece.",
       "type": "link",
       "views": "50 View",
-      "engagement": "Like Share",
-      "link": ""
+      "engagement": "Like Share"
     },
     {
       "title": "Juice Social Media Video",
       "description": "Short‑form video for social media.",
       "type": "link",
       "views": "50 View",
-      "engagement": "Like Share",
-      "link": ""
+      "engagement": "Like Share"
     }
   ],
   "projectBreakdown": [
@@ -254,15 +276,15 @@
   "footer": {
     "name": "Vrutant",
     "role": "Video Editor",
-    "copyright": "© 2024 Vrutant. All rights reserved."
+    "copyright": "© 2026 Vrutant. All rights reserved."
   },
-  "navigationMenuText": "About | #about\nExperience | #experience\nProjects | #projects\nContact | #contact\n",
+  "navigationMenuText": "About | #about\nExperience | #experience\nProjects | #projects\nContact | #contact",
   "projectBreakdownText": "Commercials | 15 Projects | 0",
-  "careerText": "Video Editor — Entrance Zone (Vatsala Academic) — 2023–Present\\nFreelance Video Editor & Cinematographer — 2021–Present\\nStudent — G.H. Raisoni College of Engineering (GHRCE) — B.Tech Computer Science — 2022–Present",
+  "careerText": "Video Editor — Entrance Zone (Vatsala Academic) — 2023–Present\nFreelance Video Editor & Cinematographer — 2021–Present\nStudent — G.H. Raisoni College of Engineering (GHRCE) — B.Tech Computer Science — 2022–Present",
   "techStackText": "Premiere Pro\nAfter Effects\nDaVinci Resolve\nFinal Cut Pro\nCapCut\nPhotoshop",
   "recognitionText": "🏆 | Best Video Edit | Video Award 2025\n⭐ | Best Video Edit | Video Award 2024",
-  "testimonialsText": "Vrutant transformed our vision into reality with exceptional and technical expertise. The commercial campaign exceeded our expectations and drove a 40% increase in engagement. | Edit Client 01\\nWorking with Vrutant was smooth and professional from start to finish. The final video quality was outstanding. | Edit Client 02",
-  "servicesRowText": "🎬 | Commercial Editing | Hospital ad - Click to watch professional commercial video editing | video | lv_0_20250921131544.mp4\\n🎥 | Documentary Films | Compelling documentary storytelling - Click to watch on YouTube | link | https://youtu.be/TbQMvC1-KtY?si=uoRZaRtT8m_0plQw\\n📵 | Music Video | Professional music video production - Click to watch on YouTube | link | https://youtu.be/yjvuz9SAhng?si=wIYBjh80LSzEwOe1\\n🎞 | Digital Content | Instagram reel content creation - Click to watch on Instagram | link | https://www.instagram.com/reel/DI-vZOwRJ4l/?igsh=MWR5MmY0aWZlejMwNQ==",
+  "testimonialsText": "Vrutant transformed our vision into reality with exceptional and technical expertise. The commercial campaign exceeded our expectations and drove a 40% increase in engagement. | Edit Client 01\nWorking with Vrutant was smooth and professional from start to finish. The final video quality was outstanding. | Edit Client 02",
+  "servicesRowText": "🎬 | Commercial Editing | Hospital ad - Click to watch professional commercial video editing | video | lv_0_20250921131544.mp4\n🎥 | Documentary Films | Compelling documentary storytelling - Click to watch on YouTube | link | https://youtu.be/TbQMvC1-KtY?si=uoRZaRtT8m_0plQw\n📵 | Music Video | Professional music video production - Click to watch on YouTube | link | https://youtu.be/yjvuz9SAhng?si=wIYBjh80LSzEwOe1\n🎞 | Digital Content | Instagram reel content creation - Click to watch on Instagram | link | https://www.instagram.com/reel/DI-vZOwRJ4l/?igsh=MWR5MmY0aWZlejMwNQ==",
   "projectsText": "Real Information Commercial | Film‑grade commercial edit for a modern brand. | link |  | 50 View | Like Share\\nClimate Change Documentary | Documentary storytelling focused on climate change. | link |  | 50 View | Like Share\\nJuice Social Media Video | Social media campaign for a juice brand. | link |  | 50 View | Like Share\\nReal Information Commercial | High‑impact TV commercial edit. | link |  | 50 View | Like Share\\nClimate Change Documentary | Awareness documentary piece. | link |  | 50 View | Like Share\\nJuice Social Media Video | Short‑form video for social media. | link |  | 50 View | Like Share",
   "theme": {
     "primary": "",

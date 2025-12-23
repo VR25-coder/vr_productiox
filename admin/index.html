@@ -8,6 +8,19 @@
   <style>
     body { background: #050505; font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
     .admin-shell { max-width: 1200px; margin: 5rem auto; padding: 2rem; background: #111; border-radius: 16px; color: #fff; }
+
+    .admin-topbar { display:flex; justify-content:space-between; align-items:flex-start; gap: 1rem; margin-bottom: 1rem; }
+    .admin-topbar h1 { margin: 0; }
+    .admin-status { display:flex; flex-wrap:wrap; justify-content:flex-end; gap: 0.6rem; }
+    .status-pill { display:inline-flex; align-items:center; gap:0.45rem; padding: 0.35rem 0.7rem; border-radius: 999px; border: 1px solid #333; background:#000; color:#cbd5e1; font-size: 0.82rem; }
+    .status-pill strong { color:#fff; font-weight:600; }
+
+    .tasks-row { display:flex; gap: 0.6rem; align-items:center; }
+    .task-input { flex:1; }
+    .task-item { display:flex; align-items:flex-start; justify-content:space-between; gap:0.75rem; padding:0.75rem 1rem; border-radius:10px; background:#000; border:1px solid #333; }
+    .task-item:hover { border-color:#4b5563; background:#020617; }
+    .task-left { display:flex; gap: 0.6rem; align-items:flex-start; }
+    .task-text { white-space:pre-wrap; }
     .admin-login { max-width: 400px; margin: 6rem auto; padding: 2rem; background: #111; border-radius: 16px; color: #fff; }
     .admin-login input { width: 100%; padding: 0.6rem 0.8rem; margin-top: 0.5rem; border-radius: 8px; border: 1px solid #333; background: #000; color: #fff; }
     .admin-login button { margin-top: 1rem; width: 100%; padding: 0.7rem; border-radius: 8px; border: none; background: #fff; color: #000; font-weight: 600; cursor: pointer; }
@@ -27,13 +40,15 @@
     .two-column { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
     .preview-box { background: #000; border-radius: 12px; padding: 1rem; border: 1px solid #333; max-height: 500px; overflow: auto; }
     .list { margin-top: 1rem; display: flex; flex-direction: column; gap: 0.75rem; }
-    .list-item { padding: 0.75rem 1rem; border-radius: 10px; background: #000; border: 1px solid #333; display: flex; justify-content: space-between; gap: 0.75rem; align-items: flex-start; }
+    .list-item { padding: 0.75rem 1rem; border-radius: 10px; background: #000; border: 1px solid #333; display: flex; justify-content: space-between; gap: 0.75rem; align-items: flex-start; transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease, background 0.18s ease; }
+    .list-item:hover { transform: translateY(-2px); box-shadow: 0 10px 30px rgba(15, 23, 42, 0.45); border-color: #4b5563; background: #020617; }
     .list-item-main { flex: 1; }
     .list-item-actions { display: flex; flex-direction: column; gap: 0.3rem; }
     .badge { display: inline-flex; align-items: center; padding: 0.1rem 0.4rem; border-radius: 999px; font-size: 0.7rem; border: 1px solid #555; margin-left: 0.5rem; }
   </style>
 </head>
 <body>
+  <canvas id="ambient-canvas" class="ambient-canvas" aria-hidden="true"></canvas>
   <div id="admin-login" class="admin-login">
     <h1>Admin Login</h1>
     <p style="font-size:0.9rem;color:#aaa;margin-top:0.5rem;">Enter admin password to manage portfolio, messages, and billing.</p>
@@ -46,15 +61,32 @@
   </div>
 
   <div id="admin-shell" class="admin-shell" style="display:none;">
-    <h1 style="margin-bottom:1rem;">Admin Panel</h1>
-    <p style="color:#aaa;font-size:0.9rem;margin-bottom:2rem;">
-      Edit portfolio content, manage messages, and handle billing. Changes are applied live as soon as you save.
-    </p>
+    <div class="admin-topbar">
+      <div style="display:flex;align-items:center;gap:0.9rem;">
+        <img id="admin-logo" src="/logo.jpg" alt="Logo" style="width:44px;height:44px;object-fit:contain;border-radius:10px;background:#000;border:1px solid #222;" />
+        <div>
+          <h1 style="display:flex;align-items:baseline;gap:0.6rem;">
+            Admin Panel
+            <span style="font-size:0.85rem;color:#9ca3af;font-weight:500;">(secure)</span>
+          </h1>
+          <p style="color:#aaa;font-size:0.9rem;margin-top:0.4rem;margin-bottom:0;">
+            Edit portfolio content, manage messages, and handle billing. Changes are applied live as soon as you save.
+          </p>
+        </div>
+      </div>
+      <div class="admin-status">
+        <div class="status-pill" id="status-clock-pill">🕒 <strong id="status-clock">--</strong></div>
+        <div class="status-pill" id="status-battery-pill">🔋 <strong id="status-battery">--</strong></div>
+      </div>
+    </div>
 
     <div class="tabs">
-      <button class="tab-btn active" data-tab="portfolio">Portfolio</button>
+      <button class="tab-btn" data-tab="portfolio">Portfolio</button>
       <button class="tab-btn" data-tab="messages">Messages</button>
+      <button class="tab-btn" data-tab="reviews">Client Reviews</button>
       <button class="tab-btn" data-tab="billing">Billing</button>
+      <button class="tab-btn" data-tab="tasks">Tasks</button>
+      <button class="tab-btn" data-tab="security">Security</button>
     </div>
 
     <div id="tab-portfolio" class="tab-panel active">
@@ -96,8 +128,78 @@
         </div>
       </div>
     </div>
+
+    <div id="tab-reviews" class="tab-panel">
+      <h2>Client Reviews</h2>
+      <p style="font-size:0.85rem;color:#aaa;">Manage the client success highlight cards that appear under Professional Journey on the public site.</p>
+      <div class="two-column" style="margin-top:1rem;align-items:flex-start;">
+        <div>
+          <h3 style="margin-bottom:0.5rem;">Review cards</h3>
+          <div id="reviews-editor-list" class="list"></div>
+          <button id="reviews-add" class="btn-secondary-admin" type="button" style="margin-top:0.75rem;">+ Add review</button>
+        </div>
+        <div>
+          <h3 style="margin-bottom:0.5rem;">Preview</h3>
+          <div id="reviews-preview" class="preview-box"></div>
+        </div>
+      </div>
+      <div class="admin-actions" style="margin-top:1.25rem;">
+        <button id="reviews-save" class="btn-primary-admin" type="button">Save Reviews</button>
+        <button id="reviews-reload" class="btn-secondary-admin" type="button">Reload from Live</button>
+      </div>
+    </div>
+
+    <div id="tab-tasks" class="tab-panel">
+      <h2>Tasks</h2>
+      <p style="font-size:0.85rem;color:#aaa;">Simple to-do list for your daily editing/admin workflow (stored locally in your browser).</p>
+      <div class="tasks-row" style="margin-top:1rem;">
+        <input id="task-input" class="task-input" type="text" placeholder="Add a task (e.g. Edit client reel, upload thumbnail, create invoice)…" />
+        <button id="task-add" class="btn-primary-admin" type="button">Add</button>
+      </div>
+      <div id="tasks-list" class="list" style="margin-top:1rem;"></div>
+    </div>
+
+    <div id="tab-security" class="tab-panel">
+      <h2>Security & Branding</h2>
+      <div class="two-column">
+        <div>
+          <h3>Change Admin Password</h3>
+          <p style="font-size:0.85rem;color:#aaa;">This requires your current password. Minimum 8 characters.</p>
+          <div class="field-group">
+            <label for="pwd-current">Current password</label>
+            <input id="pwd-current" type="password" autocomplete="current-password" />
+          </div>
+          <div class="field-group">
+            <label for="pwd-new">New password</label>
+            <input id="pwd-new" type="password" autocomplete="new-password" />
+          </div>
+          <div class="field-group">
+            <label for="pwd-new-confirm">Confirm new password</label>
+            <input id="pwd-new-confirm" type="password" autocomplete="new-password" />
+          </div>
+          <div class="admin-actions">
+            <button id="btn-change-password" class="btn-primary-admin" type="button">Update Password</button>
+          </div>
+          <p id="pwd-status" style="font-size:0.85rem;margin-top:0.75rem;color:#9ca3af;"></p>
+        </div>
+        <div>
+          <h3>Logo</h3>
+          <p style="font-size:0.85rem;color:#aaa;">Upload a logo to display in the admin panel and invoices.</p>
+          <div style="display:flex;align-items:center;gap:0.8rem;margin:0.5rem 0 0.75rem 0;">
+            <img id="logo-preview" src="/logo.jpg" alt="Logo preview" style="width:64px;height:64px;object-fit:contain;border-radius:12px;background:#000;border:1px solid #222;" />
+            <div style="font-size:0.8rem;color:#9ca3af;">If you don’t see your logo, upload it below.</div>
+          </div>
+          <div class="field-group">
+            <label for="logo-upload">Upload logo (JPG/PNG/WebP)</label>
+            <input id="logo-upload" type="file" accept="image/*" />
+          </div>
+          <p style="font-size:0.8rem;color:#9ca3af;">After uploading, click <strong>Save Changes</strong> in the Portfolio tab to persist the logo URL.</p>
+        </div>
+      </div>
+    </div>
   </div>
 
+  <script src="../ambient.js"></script>
   <script src="admin.js"></script>
 </body>
 </html>

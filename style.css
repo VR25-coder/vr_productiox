@@ -54,6 +54,77 @@ body::after {
     pointer-events: none;
 }
 
+/* Ambient animated canvas (public site + admin) */
+.ambient-canvas {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: -3;
+    pointer-events: none;
+    opacity: 0.85;
+}
+
+/* Cinematic spotlight (mouse-follow) */
+.spotlight {
+    position: fixed;
+    inset: 0;
+    z-index: -2;
+    pointer-events: none;
+    opacity: 0.9;
+    background:
+        radial-gradient(
+            520px circle at var(--mx, 50%) var(--my, 35%),
+            rgba(124, 58, 237, 0.16),
+            rgba(59, 130, 246, 0.08) 35%,
+            rgba(0, 0, 0, 0) 70%
+        );
+    mix-blend-mode: screen;
+    filter: blur(0.2px);
+}
+
+/* Scanlines / film overlay */
+.scanlines {
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    opacity: 0.16;
+    background:
+        repeating-linear-gradient(
+            to bottom,
+            rgba(255, 255, 255, 0.06) 0px,
+            rgba(255, 255, 255, 0.02) 1px,
+            rgba(0, 0, 0, 0.0) 3px,
+            rgba(0, 0, 0, 0.0) 6px
+        );
+    animation: scanMove 7s linear infinite;
+}
+
+@keyframes scanMove {
+    from { transform: translateY(0); }
+    to { transform: translateY(32px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .ambient-canvas,
+    .spotlight,
+    .scanlines {
+        display: none;
+    }
+}
+
+/* Admin panel: subtle tab fade-in */
+@keyframes tabFadeIn {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.tab-panel.active {
+    animation: tabFadeIn 0.22s ease both;
+}
+
 /* Floating decorative dots */
 .header::before {
     content: '';
@@ -264,6 +335,29 @@ body::after {
     gap: 0.5rem;
     transition: all 0.3s ease;
     box-shadow: 0 4px 20px rgba(255, 255, 255, 0.2);
+    position: relative;
+    overflow: hidden;
+}
+
+/* Shimmer highlight for primary CTA */
+.btn-primary::after {
+    content: '';
+    position: absolute;
+    top: -40%;
+    left: -60%;
+    width: 60%;
+    height: 180%;
+    background: linear-gradient(90deg, transparent, rgba(0,0,0,0.12), transparent);
+    transform: rotate(18deg);
+    animation: btnShimmer 3.2s ease-in-out infinite;
+    pointer-events: none;
+}
+
+@keyframes btnShimmer {
+    0% { transform: translateX(0) rotate(18deg); opacity: 0; }
+    20% { opacity: 0.55; }
+    45% { transform: translateX(220%) rotate(18deg); opacity: 0; }
+    100% { opacity: 0; }
 }
 
 .btn-primary:hover {
@@ -1981,11 +2075,13 @@ body::after {
     border-radius: 12px;
     border: 1px solid rgba(255, 255, 255, 0.1);
     overflow: hidden;
-    transition: transform 0.3s ease;
+    transition: transform 0.35s ease, box-shadow 0.35s ease, border-color 0.35s ease;
 }
 
 .project-card:hover {
     transform: perspective(1100px) rotateX(4deg) rotateY(-4deg) translateY(-8px) scale(1.02);
+    border-color: rgba(124, 58, 237, 0.6);
+    box-shadow: 0 22px 60px rgba(0, 0, 0, 0.75), 0 0 42px rgba(124, 58, 237, 0.18);
 }
 
 .project-thumbnail {
@@ -1997,12 +2093,24 @@ body::after {
     align-items: center;
     justify-content: center;
     border-radius: 12px 12px 0 0;
+    overflow: hidden;
+}
+
+.project-thumbnail::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background:
+        radial-gradient(circle at 20% 10%, rgba(255,255,255,0.12), transparent 45%),
+        linear-gradient(180deg, rgba(0,0,0,0.0), rgba(0,0,0,0.45));
+    opacity: 0.85;
+    pointer-events: none;
 }
 
 .play-button {
     width: 70px;
     height: 70px;
-    background: rgba(255, 255, 255, 0.9);
+    background: rgba(255, 255, 255, 0.92);
     border-radius: 50%;
     display: flex;
     align-items: center;
@@ -2012,6 +2120,23 @@ body::after {
     cursor: pointer;
     transition: all 0.3s ease;
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+    position: relative;
+}
+
+.play-button::before {
+    content: '';
+    position: absolute;
+    inset: -8px;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.35);
+    opacity: 0.0;
+    transform: scale(0.95);
+    transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+.project-card:hover .play-button::before {
+    opacity: 1;
+    transform: scale(1);
 }
 
 .play-button:hover {
@@ -2605,4 +2730,80 @@ body {
 
 .submit-btn:hover {
     box-shadow: 0 8px 25px rgba(124, 58, 237, 0.4);
+}
+
+/* ===============================
+   FIX ONLY: Project Breakdown Card
+   =============================== */
+
+.dashboard-card.project-breakdown .project-bars {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    column-gap: 24px;
+    row-gap: 20px;
+}
+
+.dashboard-card.project-breakdown .project-bar-item {
+    width: 100%;
+}
+
+@media (max-width: 768px) {
+    .dashboard-card.project-breakdown .project-bars {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* ==================================================
+   FIX: Project Portfolio Breakdown (ONLY this card)
+   ================================================== */
+
+.dashboard-card.project-breakdown .project-bars {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 22px 28px;
+}
+
+.dashboard-card.project-breakdown .project-bar-item {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+/* Bar track */
+.dashboard-card.project-breakdown .project-bar {
+    height: 6px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.12);
+    overflow: hidden;
+}
+
+/* Bar fill */
+.dashboard-card.project-breakdown .project-fill {
+    height: 100%;
+    border-radius: inherit;
+}
+
+/* Label row under bar */
+.dashboard-card.project-breakdown .project-labels {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+/* Text styling */
+.dashboard-card.project-breakdown .project-name {
+    font-size: 0.95rem;
+    font-weight: 500;
+    color: #ffffff;
+}
+
+.dashboard-card.project-breakdown .project-count {
+    font-size: 0.85rem;
+    color: #9ca3af;
+}
+
+@media (max-width: 768px) {
+    .dashboard-card.project-breakdown .project-bars {
+        grid-template-columns: 1fr;
+    }
 }

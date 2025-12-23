@@ -14,6 +14,8 @@ document.addEventListener('DOMContentLoaded', function() {
     initSmoothScrolling();
     initProgressBars();
     initScrollAnimations();
+    initCountUpStats();
+    initSpotlight();
     initFormHandling();
     initMobileMenu();
     // Typewriter effect disabled to avoid hero title duplication
@@ -146,6 +148,84 @@ document.addEventListener('DOMContentLoaded', function() {
         projectCards.forEach((card, index) => {
             card.style.transitionDelay = `${index * 0.1}s`;
         });
+    }
+
+    // Count-up animation for stats
+    function initCountUpStats() {
+        const statEls = document.querySelectorAll('.stat-number-left');
+        if (!statEls.length) return;
+
+        function parseStat(text) {
+            const raw = String(text || '').trim();
+            const match = raw.match(/(\d+(?:\.\d+)?)/);
+            if (!match) return { value: 0, prefix: raw, suffix: '' };
+            const value = parseFloat(match[1]);
+            const start = match.index || 0;
+            const end = start + match[1].length;
+            return {
+                value: isNaN(value) ? 0 : value,
+                prefix: raw.slice(0, start),
+                suffix: raw.slice(end)
+            };
+        }
+
+        function animate(el) {
+            const { value, prefix, suffix } = parseStat(el.textContent);
+            const duration = 900;
+            const startValue = 0;
+            const startTime = performance.now();
+
+            function tick(now) {
+                const t = Math.min(1, (now - startTime) / duration);
+                const eased = 1 - Math.pow(1 - t, 3);
+                const current = Math.round((startValue + (value - startValue) * eased) * 10) / 10;
+                el.textContent = prefix + (Number.isInteger(value) ? Math.round(current) : current) + suffix;
+                if (t < 1) requestAnimationFrame(tick);
+            }
+
+            requestAnimationFrame(tick);
+        }
+
+        const seen = new WeakSet();
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting && !seen.has(entry.target)) {
+                    seen.add(entry.target);
+                    animate(entry.target);
+                }
+            });
+        }, { threshold: 0.6 });
+
+        statEls.forEach(el => observer.observe(el));
+    }
+
+    // Cinematic spotlight that follows the cursor
+    function initSpotlight() {
+        try {
+            if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+        } catch (e) {
+            // ignore
+        }
+
+        const spotlight = document.querySelector('.spotlight');
+        if (!spotlight) return;
+
+        let raf = 0;
+        const update = (x, y) => {
+            document.documentElement.style.setProperty('--mx', x + 'px');
+            document.documentElement.style.setProperty('--my', y + 'px');
+        };
+
+        const onMove = (e) => {
+            const x = e.clientX;
+            const y = e.clientY;
+            if (raf) cancelAnimationFrame(raf);
+            raf = requestAnimationFrame(() => update(x, y));
+        };
+
+        // Set initial center
+        update(window.innerWidth * 0.5, window.innerHeight * 0.35);
+        window.addEventListener('mousemove', onMove, { passive: true });
     }
     
     // Form handling
@@ -1079,6 +1159,18 @@ async function loadPortfolioContentFromJSON() {
                     if (statSpans.length >= 2) {
                         statSpans[0].textContent = project.views || '';
                         statSpans[1].textContent = project.engagement || '';
+                    }
+
+                    if (project.thumbnail) {
+                        const t = String(project.thumbnail).trim();
+                        // Always try to use thumbnail as an image URL.
+                        // Note: if you paste a non-image page URL (e.g. Instagram post link), it may not load.
+                        if (t) {
+                            thumb.style.backgroundImage = `url(${t})`;
+                            thumb.style.backgroundSize = 'cover';
+                            thumb.style.backgroundPosition = 'center';
+                            thumb.style.backgroundRepeat = 'no-repeat';
+                        }
                     }
 
                     const type = project.type || 'link';

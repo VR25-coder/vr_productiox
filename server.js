@@ -3,28 +3,43 @@ const fs = require('fs');
 const path = require('path');
 const PDFDocument = require('pdfkit');
 
-const app = express();
-const PORT = process.env.PORT || 3000;
+const compression = require('compression');
+const morgan = require('morgan');
+const bcrypt = require('bcryptjs');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
+const jwt = require('jsonwebtoken');
+const { z } = require('zod');
+const db = require('./db');
 
-// Simple in-memory auth token (reset when server restarts)
-let currentToken = null;
-// NOTE: change this password before deploying publicly
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'vrutant123';
+require('dotenv').config();
+
+const app = express();
+app.disable('x-powered-by');
+
+const PORT = process.env.PORT || 3002;
+const IS_PROD = process.env.NODE_ENV === 'production';
 
 const dataDir = path.join(__dirname, 'data');
 const portfolioFile = path.join(dataDir, 'portfolio_data.json');
 const messagesFile = path.join(dataDir, 'messages.json');
 const invoicesFile = path.join(dataDir, 'invoices.json');
+const adminAuthFile = path.join(dataDir, 'admin_auth.json');
+
 const uploadsDir = path.join(__dirname, 'uploads');
+const publicDir = path.join(__dirname, 'public');
+const adminDir = path.join(__dirname, 'admin');
 
-if (!fs.existsSync(dataDir)) {
-  fs.mkdirSync(dataDir, { recursive: true });
+if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
+if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
+
+// Secrets
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+  throw new Error('JWT_SECRET must be set (see .env.example)');
 }
 
-if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir, { recursive: true });
-}
-
+// Admin password storage: bcrypt hash persisted to data/admin_auth.json
 function readJson(file, fallback) {
   try {
     if (!fs.existsSync(file)) return fallback;
@@ -36,78 +51,329 @@ function readJson(file, fallback) {
   }
 }
 
-function writeJson(file, value) {
-  fs.writeFileSync(file, JSON.stringify(value, null, 2), 'utf8');
+function writeJsonAtomic(file, value) {
+  const tmp = file + '.tmp';
+  fs.writeFileSync(tmp, JSON.stringify(value, null, 2), 'utf8');
+  fs.renameSync(tmp, file);
+}
+
+function ensureAdminAuth() {
+  const stored = readJson(adminAuthFile, null);
+  if (stored && typeof stored.passwordHash === 'string' && stored.passwordHash.length > 20) {
+    return stored;
+  }
+
+  const initialPassword = process.env.ADMIN_PASSWORD;
+  if (!initialPassword) {
+    throw new Error('ADMIN_PASSWORD must be set for first run (it will be hashed into data/admin_auth.json)');
+  }
+
+  const passwordHash = bcrypt.hashSync(String(initialPassword), 12);
+  const next = { passwordHash, updatedAt: new Date().toISOString() };
+  writeJsonAtomic(adminAuthFile, next);
+  console.log('[init] Created data/admin_auth.json from ADMIN_PASSWORD');
+  return next;
+}
+
+function verifyAdminPassword(password) {
+  const auth = ensureAdminAuth();
+  try {
+    return bcrypt.compareSync(String(password || ''), auth.passwordHash);
+  } catch {
+    return false;
+  }
+}
+
+function setAdminPassword(newPassword) {
+  const passwordHash = bcrypt.hashSync(String(newPassword), 12);
+  const next = { passwordHash, updatedAt: new Date().toISOString() };
+  writeJsonAtomic(adminAuthFile, next);
+  return { updatedAt: next.updatedAt };
 }
 
 // Middleware
-app.use(express.json({ limit: '20mb' }));
+// Compression should run before other middleware and routes so responses are gzipped where supported.
+app.use(compression());
 
-// Very simple auth middleware
+// HTTP request logging (skip health checks in production to reduce noise)
+if (!IS_PROD) {
+  app.use(morgan('dev'));
+} else {
+  app.use(
+    morgan('combined', {
+      skip: (req, res) => req.path === '/healthz'
+    })
+  );
+}
+
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      useDefaults: true,
+      directives: {
+        "default-src": ["'self'"],
+        "base-uri": ["'self'"],
+        "object-src": ["'none'"],
+        "frame-ancestors": ["'none'"],
+        // Allow inline styles (admin uses style="..."); keep scripts strict
+        "script-src": ["'self'"],
+        "style-src": ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
+        "font-src": ["'self'", 'https://fonts.gstatic.com', 'data:'],
+        "img-src": ["'self'", 'data:', 'https:'],
+        "media-src": ["'self'", 'https:']
+      }
+    },
+    crossOriginEmbedderPolicy: false
+  })
+);
+
+// Needs to be large enough for base64 uploads (admin panel). The upload route
+// also enforces a decoded max-size check server-side.
+app.use(express.json({ limit: '30mb' }));
+
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 12,
+  standardHeaders: true,
+  legacyHeaders: false
+});
+
+const messagesLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000,
+  limit: 25,
+  standardHeaders: true,
+  legacyHeaders: false
+});
+
+const uploadLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000,
+  limit: 30,
+  standardHeaders: true,
+  legacyHeaders: false
+});
+
+// Auth middleware (JWT)
 function requireAuth(req, res, next) {
   const auth = req.headers.authorization || '';
   const token = auth.startsWith('Bearer ') ? auth.slice(7) : null;
-  if (!token || token !== currentToken) {
+  if (!token) return res.status(401).json({ error: 'Unauthorized' });
+
+  try {
+    const payload = jwt.verify(token, JWT_SECRET);
+    req.user = payload;
+    next();
+  } catch {
     return res.status(401).json({ error: 'Unauthorized' });
   }
-  next();
 }
 
+function requireAdmin(req, res, next) {
+  requireAuth(req, res, () => {
+    if (!req.user || req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+    next();
+  });
+}
+
+
+const messageSchema = z.object({
+  first_name: z.string().trim().min(1).max(80),
+  last_name: z.string().trim().min(1).max(80),
+  email: z.string().trim().email().max(200),
+  subject: z.string().trim().min(1).max(200),
+  message: z.string().trim().min(10).max(4000)
+});
+
+function hasProhibitedLanguage(text) {
+  if (!text) return false;
+  const value = String(text).toLowerCase();
+  const banned = [
+    'fuck', 'f***', 'shit', 'bitch', 'bastard', 'slut', 'whore',
+    'nigger', 'chutiya', 'madarchod', 'bhenchod', 'gaand', 'harami'
+  ];
+  return banned.some(word => value.includes(word));
+}
+
+const portfolioSchema = z.object({}).passthrough();
+
+const messagePatchSchema = z
+  .object({
+    read: z.boolean().optional()
+  })
+  .strict();
+
+const invoiceServiceSchema = z.object({
+  name: z.string().trim().min(1).max(120),
+  description: z.string().trim().max(800).optional().default(''),
+  quantity: z.number().nonnegative().optional().default(0),
+  rate: z.number().nonnegative().optional().default(0),
+  amount: z.number().nonnegative().optional().default(0)
+});
+
+const invoiceCreateSchema = z
+  .object({
+    clientName: z.string().trim().min(1).max(200),
+    clientEmail: z.string().trim().email().max(200).optional().or(z.literal('')).optional(),
+    clientPhone: z.string().trim().max(80).optional().or(z.literal('')).optional(),
+    clientAddress: z.string().trim().max(240).optional().or(z.literal('')).optional(),
+    clientCity: z.string().trim().max(140).optional().or(z.literal('')).optional(),
+
+    projectName: z.string().trim().min(1).max(200),
+    projectId: z.string().trim().max(80).optional().or(z.literal('')).optional(),
+    reference: z.string().trim().max(80).optional().or(z.literal('')).optional(),
+    dueDate: z.string().trim().max(80).optional().or(z.literal('')).optional(),
+
+    services: z.array(invoiceServiceSchema).min(1),
+
+    additionalCharges: z
+      .object({
+        extraRevision: z.number().nonnegative().optional().default(0),
+        expressDelivery: z.number().nonnegative().optional().default(0),
+        addonsAmount: z.number().nonnegative().optional().default(0),
+        addonsDescription: z.string().trim().max(300).optional().default('')
+      })
+      .optional()
+      .default({}),
+
+    summary: z
+      .object({
+        subtotal: z.number().nonnegative().optional().default(0),
+        taxPercent: z.number().nonnegative().optional().default(0),
+        taxAmount: z.number().nonnegative().optional().default(0),
+        discount: z.number().nonnegative().optional().default(0),
+        total: z.number().nonnegative().optional().default(0)
+      })
+      .optional()
+      .default({}),
+
+    currency: z.string().trim().max(10).optional().default(''),
+    paymentStatus: z.enum(['unpaid', 'paid', 'partial']).optional().default('unpaid'),
+    status: z.enum(['unpaid', 'paid', 'partial']).optional().default('unpaid'),
+    paymentMethod: z.string().trim().max(80).optional().default(''),
+    notes: z.string().trim().max(1200).optional().default(''),
+
+    footer: z
+      .object({
+        businessName: z.string().trim().max(200).optional().default(''),
+        contact: z.string().trim().max(300).optional().default(''),
+        address: z.string().trim().max(240).optional().default(''),
+        city: z.string().trim().max(140).optional().default(''),
+        taxId: z.string().trim().max(80).optional().default(''),
+        website: z.string().trim().max(120).optional().default(''),
+        email: z.string().trim().max(120).optional().default(''),
+        phone: z.string().trim().max(80).optional().default(''),
+        terms: z.string().trim().max(2000).optional().default(''),
+        refundPolicy: z.string().trim().max(2000).optional().default('')
+      })
+      .optional()
+      .default({})
+  })
+  .passthrough();
+
+const invoicePatchSchema = z
+  .object({
+    status: z.enum(['unpaid', 'paid', 'partial']).optional(),
+    paymentStatus: z.enum(['unpaid', 'paid', 'partial']).optional(),
+    paymentMethod: z.string().trim().max(80).optional(),
+    notes: z.string().trim().max(1200).optional()
+  })
+  .strict();
+
+const passwordChangeSchema = z
+  .object({
+    currentPassword: z.string().min(1).max(200),
+    newPassword: z.string().min(8).max(200)
+  })
+  .strict();
+
 // Login route
-app.post('/api/login', (req, res) => {
+app.post('/api/login', loginLimiter, (req, res) => {
   const { password } = req.body || {};
-  if (!password || password !== ADMIN_PASSWORD) {
+  if (!verifyAdminPassword(password)) {
     return res.status(401).json({ error: 'Invalid credentials' });
   }
-  // Generate simple token
-  currentToken = Math.random().toString(36).slice(2) + Date.now().toString(36);
-  res.json({ token: currentToken });
+
+  const token = jwt.sign({ role: 'admin' }, JWT_SECRET, { expiresIn: '12h' });
+  res.json({ token });
+});
+
+// Change admin password (requires current password)
+app.post('/api/admin/password', requireAdmin, (req, res) => {
+  const parsed = passwordChangeSchema.safeParse(req.body || {});
+  if (!parsed.success) return res.status(400).json({ error: 'Invalid payload' });
+
+  const { currentPassword, newPassword } = parsed.data;
+  if (!verifyAdminPassword(currentPassword)) {
+    return res.status(401).json({ error: 'Invalid current password' });
+  }
+
+  const info = setAdminPassword(newPassword);
+  res.json({ success: true, ...info });
 });
 
 // Portfolio: public GET used by script.js
 app.get('/portfolio_data.json', (req, res) => {
-  const data = readJson(portfolioFile, {});
+  const data = db.getPortfolio();
   res.json(data);
 });
 
 // Portfolio: admin update
-app.put('/api/portfolio', requireAuth, (req, res) => {
-  const data = req.body || {};
-  writeJson(portfolioFile, data);
+app.put('/api/portfolio', requireAdmin, (req, res) => {
+  const parsed = portfolioSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: 'Invalid portfolio payload' });
+
+  db.setPortfolio(parsed.data);
   res.json({ success: true });
 });
 
 // Media upload (images, video, etc.)
 // Expects JSON: { fileName, content, folder? } where content is a data URL or base64 string
-app.post('/api/upload', requireAuth, (req, res) => {
+// NOTE: this is intentionally strict to keep deployments safe.
+app.post('/api/upload', requireAdmin, uploadLimiter, (req, res) => {
   try {
     const { fileName, content, folder } = req.body || {};
     if (!fileName || !content) {
       return res.status(400).json({ error: 'fileName and content are required' });
     }
 
+    const ext = String(path.extname(fileName || '')).toLowerCase();
+    const allowedExt = new Set(['.png', '.jpg', '.jpeg', '.jfif', '.webp', '.gif', '.mp4', '.mov', '.pdf']);
+    if (!allowedExt.has(ext)) {
+      return res.status(400).json({ error: 'Unsupported file type' });
+    }
+
     // Basic sanitization of file name
     const safeName = Date.now().toString(36) + '-' + fileName.replace(/[^a-zA-Z0-9_.-]/g, '_');
-    const targetDir = folder
-      ? path.join(uploadsDir, folder.replace(/[^a-zA-Z0-9_-]/g, '_'))
-      : uploadsDir;
+
+    // Restrict folders to prevent arbitrary path creation
+    const requestedFolder = folder ? String(folder) : '';
+    const safeFolder = ['images', 'videos', 'docs', 'branding'].includes(requestedFolder) ? requestedFolder : '';
+    const targetDir = safeFolder ? path.join(uploadsDir, safeFolder) : uploadsDir;
 
     if (!fs.existsSync(targetDir)) {
       fs.mkdirSync(targetDir, { recursive: true });
     }
 
-    let base64 = content;
-    const commaIndex = content.indexOf(',');
+    let base64 = String(content);
+    const commaIndex = base64.indexOf(',');
     if (commaIndex !== -1) {
-      base64 = content.slice(commaIndex + 1);
+      base64 = base64.slice(commaIndex + 1);
     }
 
     const buffer = Buffer.from(base64, 'base64');
+
+    // 15MB max decoded file size
+    const maxBytes = 15 * 1024 * 1024;
+    if (buffer.length > maxBytes) {
+      return res.status(413).json({ error: 'File too large' });
+    }
+
     const filePath = path.join(targetDir, safeName);
     fs.writeFileSync(filePath, buffer);
 
     // Public URL path relative to site root
-    const publicPath = '/uploads' + (folder ? '/' + folder.replace(/[^a-zA-Z0-9_-]/g, '_') : '') + '/' + safeName;
+    const publicPath = '/uploads' + (safeFolder ? '/' + safeFolder : '') + '/' + safeName;
 
     res.json({ success: true, url: publicPath, fileName: safeName });
   } catch (e) {
@@ -117,112 +383,395 @@ app.post('/api/upload', requireAuth, (req, res) => {
 });
 
 // Messages API
-app.post('/api/messages', (req, res) => {
+app.post('/api/messages', messagesLimiter, (req, res) => {
+  const parsed = messageSchema.safeParse(req.body || {});
+  if (!parsed.success) {
+    return res.status(400).json({ error: 'Invalid message payload' });
+  }
+
+  const { subject, message } = parsed.data;
+  if (hasProhibitedLanguage(subject) || hasProhibitedLanguage(message)) {
+    return res.status(400).json({ error: 'Inappropriate language is not allowed' });
+  }
+
   const messages = readJson(messagesFile, []);
-  const now = new Date().toISOString();
   const id = 'msg_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
-  const msg = { id, read: false, createdAt: now, ...req.body };
-  messages.push(msg);
-  writeJson(messagesFile, messages);
+  const createdAt = new Date().toISOString();
+  const msg = { id, read: false, createdAt, ...parsed.data };
+  db.insertMessage(msg);
   res.json({ success: true, id });
 });
 
-app.get('/api/messages', requireAuth, (req, res) => {
-  const messages = readJson(messagesFile, []);
+app.get('/api/messages', requireAdmin, (req, res) => {
+  const messages = db.getMessages();
   res.json(messages);
 });
 
-app.patch('/api/messages/:id', requireAuth, (req, res) => {
-  const messages = readJson(messagesFile, []);
+app.patch('/api/messages/:id', requireAdmin, (req, res) => {
+  const parsed = messagePatchSchema.safeParse(req.body || {});
+  if (!parsed.success) return res.status(400).json({ error: 'Invalid payload' });
+
   const { id } = req.params;
-  const idx = messages.findIndex(m => m.id === id);
-  if (idx === -1) return res.status(404).json({ error: 'Not found' });
-  messages[idx] = { ...messages[idx], ...req.body };
-  writeJson(messagesFile, messages);
+  const ok = db.updateMessage(id, parsed.data);
+  if (!ok) return res.status(404).json({ error: 'Not found' });
   res.json({ success: true });
 });
 
-app.delete('/api/messages/:id', requireAuth, (req, res) => {
-  const messages = readJson(messagesFile, []);
+app.delete('/api/messages/:id', requireAdmin, (req, res) => {
   const { id } = req.params;
-  const next = messages.filter(m => m.id !== id);
-  writeJson(messagesFile, next);
+  const ok = db.deleteMessage(id);
+  if (!ok) return res.status(404).json({ error: 'Not found' });
   res.json({ success: true });
 });
 
 // Invoices API
-app.get('/api/invoices', requireAuth, (req, res) => {
-  const invoices = readJson(invoicesFile, []);
+app.get('/api/invoices', requireAdmin, (req, res) => {
+  const invoices = db.getInvoices();
   res.json(invoices);
 });
 
-app.post('/api/invoices', requireAuth, (req, res) => {
-  const invoices = readJson(invoicesFile, []);
+app.post('/api/invoices', requireAdmin, (req, res) => {
+  const parsed = invoiceCreateSchema.safeParse(req.body || {});
+  if (!parsed.success) return res.status(400).json({ error: 'Invalid invoice payload' });
+
   const now = new Date().toISOString();
   const id = 'inv_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
-  const inv = { id, createdAt: now, status: 'unpaid', ...req.body };
-  invoices.push(inv);
-  writeJson(invoicesFile, invoices);
+
+  const inv = {
+    id,
+    createdAt: now,
+    status: parsed.data.status || parsed.data.paymentStatus || 'unpaid',
+    ...parsed.data
+  };
+
+  db.insertInvoice(inv);
   res.json({ success: true, id });
 });
 
-app.patch('/api/invoices/:id', requireAuth, (req, res) => {
-  const invoices = readJson(invoicesFile, []);
+app.patch('/api/invoices/:id', requireAdmin, (req, res) => {
+  const parsed = invoicePatchSchema.safeParse(req.body || {});
+  if (!parsed.success) return res.status(400).json({ error: 'Invalid payload' });
+
   const { id } = req.params;
-  const idx = invoices.findIndex(i => i.id === id);
-  if (idx === -1) return res.status(404).json({ error: 'Not found' });
-  invoices[idx] = { ...invoices[idx], ...req.body };
-  writeJson(invoicesFile, invoices);
+  const ok = db.patchInvoice(id, parsed.data);
+  if (!ok) return res.status(404).json({ error: 'Not found' });
   res.json({ success: true });
 });
 
 // Delete invoice
-app.delete('/api/invoices/:id', requireAuth, (req, res) => {
-  const invoices = readJson(invoicesFile, []);
+app.delete('/api/invoices/:id', requireAdmin, (req, res) => {
   const { id } = req.params;
-  const next = invoices.filter(i => i.id !== id);
-  writeJson(invoicesFile, next);
+  const ok = db.deleteInvoice(id);
+  if (!ok) return res.status(404).json({ error: 'Not found' });
   res.json({ success: true });
 });
 
-// Invoice PDF download
-app.get('/api/invoices/:id/pdf', requireAuth, (req, res) => {
-  const invoices = readJson(invoicesFile, []);
+// Invoice PDF download with modern A4 SaaS-style layout
+app.get('/api/invoices/:id/pdf', requireAdmin, (req, res) => {
   const { id } = req.params;
-  const inv = invoices.find(i => i.id === id);
+  const inv = db.getInvoiceById(id);
   if (!inv) return res.status(404).json({ error: 'Not found' });
 
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', `attachment; filename="${id}.pdf"`);
 
-  const doc = new PDFDocument({ margin: 50 });
+  const footer = inv.footer || {};
+  const logoUrl = footer.logoUrl ? String(footer.logoUrl) : '';
+  const logoPathFallback = path.join(publicDir, 'logo.jpg');
+  const logoPathFromUploads = (() => {
+    if (!logoUrl) return null;
+    if (!logoUrl.startsWith('/uploads/')) return null;
+    const rel = logoUrl.replace(/^\//, '');
+    const resolved = path.resolve(__dirname, rel);
+    const uploadsRoot = path.resolve(uploadsDir);
+    const withinUploads = resolved === uploadsRoot || resolved.startsWith(uploadsRoot + path.sep);
+    if (!withinUploads) return null;
+    return resolved;
+  })();
+
+  const doc = new PDFDocument({
+    size: 'A4',
+    margins: { top: 48, left: 48, right: 48, bottom: 64 }
+  });
+
   doc.pipe(res);
 
-  doc.fontSize(18).text('Invoice', { align: 'center' }).moveDown();
+  const pageWidth = doc.page.width;
+  const pageHeight = doc.page.height;
+  const marginLeft = doc.page.margins.left;
+  const marginRight = doc.page.margins.right;
+  const contentWidth = pageWidth - marginLeft - marginRight;
 
-  doc.fontSize(12).text(`Invoice ID: ${inv.id}`);
-  doc.text(`Date: ${inv.createdAt || new Date().toISOString()}`);
-  doc.moveDown();
+  const primaryBlue = '#4F6EF7';
+  const textBlack = '#111827';
+  const textSecondary = '#6B7280';
+  const borderColor = '#E5E7EB';
 
-  doc.fontSize(14).text('Bill To:', { underline: true });
-  doc.fontSize(12).text(inv.clientName || '');
-  doc.text(inv.project ? `Project: ${inv.project}` : '');
-  doc.moveDown();
+  const currencyCode = (inv.currency || 'US$').trim();
+  const formatMoney = (value) => `${currencyCode} ${Number(value || 0).toFixed(2)}`;
 
-  doc.fontSize(12).text(`Amount: ${inv.amount || 0} ${inv.currency || ''}`);
-  doc.text(`Status: ${inv.status || 'unpaid'}`);
-  if (inv.notes) {
-    doc.moveDown();
-    doc.text('Notes:', { underline: true });
-    doc.text(inv.notes);
+  const clientName = inv.clientName || '';
+  const clientAddress = inv.clientAddress || '';
+  const clientCity = inv.clientCity || '';
+
+  const businessName = footer.businessName || 'VR PRODUCTIONS';
+  const businessAddress = footer.address || 'Nagpur, Maharashtra, India';
+  const businessCity = footer.city || 'Nagpur, Maharashtra, India';
+  const footerWebsite = footer.website || '';
+  const footerEmail = footer.email || '';
+  const footerPhone = footer.phone || '';
+
+  const createdAt = inv.createdAt ? new Date(inv.createdAt) : new Date();
+  const invoiceDate = (inv.invoiceDate && String(inv.invoiceDate).trim())
+    ? String(inv.invoiceDate).trim()
+    : createdAt.toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' });
+
+  const baseDueDate = createdAt;
+  const explicitDue = inv.dueDate && String(inv.dueDate).trim();
+  const dueDateObj = explicitDue ? new Date(explicitDue) : new Date(baseDueDate.getTime() + 15 * 24 * 60 * 60 * 1000);
+  const dueDate = dueDateObj.toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' });
+
+  const invoiceNumber = inv.projectId || inv.id;
+  const reference = (inv.reference && String(inv.reference).trim()) || invoiceNumber;
+
+  const services = Array.isArray(inv.services) ? inv.services : [];
+
+  let subtotal = 0;
+  services.forEach((s) => {
+    const amount = s.amount != null ? Number(s.amount) : (Number(s.quantity || 0) * Number(s.rate || 0));
+    if (!Number.isNaN(amount)) subtotal += amount;
+  });
+
+  const taxPercent = 10;
+  const taxAmount = subtotal * taxPercent / 100;
+  const total = subtotal + taxAmount;
+
+  // TOP LEFT: INVOICE title
+  let cursorY = doc.page.margins.top;
+  doc.fillColor(textBlack).font('Helvetica-Bold').fontSize(26).text('INVOICE', marginLeft, cursorY, {
+    width: contentWidth / 2,
+    align: 'left'
+  });
+
+  // TOP RIGHT: Logo + company info
+  const rightBlockWidth = contentWidth / 2;
+  const rightBlockX = pageWidth - marginRight - rightBlockWidth;
+
+  let rightY = cursorY;
+  try {
+    const lp = (logoPathFromUploads && fs.existsSync(logoPathFromUploads))
+      ? logoPathFromUploads
+      : (fs.existsSync(logoPathFallback) ? logoPathFallback : null);
+    if (lp) {
+      const logoWidth = 72;
+      doc.image(lp, rightBlockX + rightBlockWidth - logoWidth, rightY, { width: logoWidth });
+      rightY += 72 + 8;
+    }
+  } catch {
+    // ignore logo errors
+  }
+
+  doc.fillColor(primaryBlue).font('Helvetica-Bold').fontSize(12)
+    .text(businessName, rightBlockX, rightY, { width: rightBlockWidth, align: 'right' });
+  rightY += 18;
+
+  doc.fillColor(textSecondary).font('Helvetica').fontSize(9);
+  if (businessAddress) {
+    doc.text(businessAddress, rightBlockX, rightY, { width: rightBlockWidth, align: 'right' });
+    rightY += 14;
+  }
+  if (businessCity) {
+    doc.text(businessCity, rightBlockX, rightY, { width: rightBlockWidth, align: 'right' });
+    rightY += 14;
+  }
+
+  // BILLED TO
+  cursorY += 64;
+  doc.fillColor(textSecondary).font('Helvetica').fontSize(9)
+    .text('Billed to', marginLeft, cursorY);
+  cursorY += 14;
+
+  doc.fillColor(textBlack).font('Helvetica-Bold').fontSize(11)
+    .text(clientName || '', marginLeft, cursorY, { width: contentWidth / 2 });
+  cursorY += 16;
+
+  doc.fillColor(textSecondary).font('Helvetica').fontSize(9);
+  if (clientAddress) {
+    doc.text(clientAddress, marginLeft, cursorY, { width: contentWidth / 2 });
+    cursorY += 14;
+  }
+  if (clientCity) {
+    doc.text(clientCity, marginLeft, cursorY, { width: contentWidth / 2 });
+    cursorY += 14;
+  }
+
+  // LEFT META DATA COLUMN
+  cursorY += 12;
+  const metaX = marginLeft;
+  let metaY = cursorY;
+
+  const metaRow = (label, value) => {
+    doc.fillColor(textSecondary).font('Helvetica').fontSize(9)
+      .text(label, metaX, metaY);
+    metaY += 12;
+    doc.fillColor(textBlack).font('Helvetica-Bold').fontSize(10)
+      .text(value || '-', metaX, metaY);
+    metaY += 20;
+  };
+
+  metaRow('Invoice #', invoiceNumber || '-');
+  metaRow('Invoice date', invoiceDate || '-');
+  metaRow('Reference', reference || '-');
+  metaRow('Due date', dueDate || '-');
+
+  // SERVICES TABLE
+  // Position table just below the meta block to avoid overlap
+  const tableTop = metaY + 16;
+  const tableX = marginLeft;
+  const rowHeight = 22;
+  const headerHeight = 24;
+
+  // Limit number of visible service rows to keep everything on a single page
+  const maxRows = 10;
+  const visibleServices = services.slice(0, maxRows);
+  const bodyHeight = Math.max(1, visibleServices.length) * rowHeight + 8;
+  const tableHeight = headerHeight + bodyHeight + 8;
+
+  const servicesColWidth = contentWidth * 0.5;
+  const qtyColWidth = contentWidth * 0.1;
+  const rateColWidth = contentWidth * 0.2;
+  const totalColWidth = contentWidth * 0.2;
+
+  const qtyX = tableX + servicesColWidth;
+  const rateX = qtyX + qtyColWidth;
+  const lineTotalX = rateX + rateColWidth;
+
+  doc.lineWidth(1).strokeColor(borderColor).roundedRect(tableX, tableTop, contentWidth, tableHeight, 6).stroke();
+
+  const headerY = tableTop + 10;
+  doc.fillColor(textSecondary).font('Helvetica-Bold').fontSize(9);
+  doc.text('Services', tableX + 12, headerY, { width: servicesColWidth - 24, align: 'left', lineBreak: false });
+  doc.text('Qty', qtyX, headerY, { width: qtyColWidth, align: 'center', lineBreak: false });
+  doc.text('Rate', rateX, headerY, { width: rateColWidth - 8, align: 'right', lineBreak: false });
+  doc.text('Line total', lineTotalX, headerY, { width: totalColWidth - 8, align: 'right', lineBreak: false });
+
+  let rowY = headerY + headerHeight - 6;
+  doc.strokeColor(borderColor).moveTo(tableX, rowY).lineTo(tableX + contentWidth, rowY).stroke();
+
+  doc.font('Helvetica').fontSize(9).fillColor(textBlack);
+  visibleServices.forEach((s, index) => {
+    const y = rowY + 4 + index * rowHeight;
+    const name = (s.name || '').trim();
+    const qtyVal = s.quantity != null ? String(s.quantity) : '';
+    const rateVal = s.rate != null ? formatMoney(s.rate) : '';
+    const amountVal = s.amount != null ? formatMoney(s.amount) : formatMoney((s.quantity || 0) * (s.rate || 0));
+
+    doc.text(name, tableX + 12, y, {
+      width: servicesColWidth - 24,
+      align: 'left',
+      lineBreak: false
+    });
+    doc.fillColor(textSecondary).text(qtyVal, qtyX, y, {
+      width: qtyColWidth,
+      align: 'center',
+      lineBreak: false
+    });
+    doc.fillColor(textBlack).text(rateVal, rateX, y, {
+      width: rateColWidth - 8,
+      align: 'right',
+      lineBreak: false
+    });
+    doc.text(amountVal, lineTotalX, y, {
+      width: totalColWidth - 8,
+      align: 'right',
+      lineBreak: false
+    });
+
+    doc.strokeColor(borderColor)
+      .moveTo(tableX, y + rowHeight)
+      .lineTo(tableX + contentWidth, y + rowHeight)
+      .stroke();
+  });
+
+  // TOTALS (BOTTOM RIGHT)
+  const totalsX = tableX + contentWidth - 220;
+  const totalsY = tableTop + tableHeight + 24;
+
+  const line = (label, value, opts = {}) => {
+    const { bold = false, color = textSecondary } = opts;
+    doc.fillColor(color).font(bold ? 'Helvetica-Bold' : 'Helvetica').fontSize(10);
+    doc.text(label, totalsX, totalsY + (opts.offsetY || 0), { width: 120, align: 'left' });
+    doc.text(value, totalsX + 120, totalsY + (opts.offsetY || 0), { width: 100, align: 'right' });
+  };
+
+  line('Subtotal', formatMoney(subtotal), { offsetY: 0, color: textBlack });
+  line(`Tax (${taxPercent}%)`, formatMoney(taxAmount), { offsetY: 18, color: textBlack });
+  line('Total due', formatMoney(total), { offsetY: 40, bold: true, color: primaryBlue });
+
+  // PAYMENT NOTE (CENTERED)
+  const noteY = totalsY + 72;
+  doc.fillColor(textSecondary).font('Helvetica-Oblique').fontSize(9)
+    .text('Please pay within 15 days of receiving this invoice.', marginLeft, noteY, {
+      width: contentWidth,
+      align: 'center',
+      lineBreak: false
+    });
+
+  // FOOTER CONTACT (BOTTOM) — keep safely within bottom margin so it never flows to a new page
+  const footerY = pageHeight - doc.page.margins.bottom - 20;
+  doc.fillColor(textSecondary).font('Helvetica').fontSize(8);
+
+  if (footerWebsite) {
+    doc.text(footerWebsite, marginLeft, footerY, { width: contentWidth / 3, align: 'left' });
+  }
+  if (footerPhone) {
+    doc.text(footerPhone, marginLeft + contentWidth / 3, footerY, { width: contentWidth / 3, align: 'center' });
+  }
+  if (footerEmail) {
+    doc.text(footerEmail, marginLeft + (2 * contentWidth) / 3, footerY, { width: contentWidth / 3, align: 'right' });
   }
 
   doc.end();
 });
 
-// Serve static files (portfolio + admin)
-app.use(express.static(__dirname));
+app.get('/healthz', (req, res) => {
+  res.json({ ok: true });
+});
 
-app.listen(PORT, () => {
+// Serve only static assets from /public and the admin UI from /admin.
+// This prevents accidentally exposing server.js, package.json, or data/.
+app.use('/uploads', express.static(uploadsDir, { fallthrough: true }));
+app.use('/admin', express.static(adminDir, { fallthrough: true }));
+app.use('/', express.static(publicDir, {
+  fallthrough: true,
+  setHeaders: (res, filePath) => {
+    // Avoid caching HTML so edits reflect quickly
+    if (filePath.endsWith('.html')) {
+      res.setHeader('Cache-Control', 'no-store');
+      return;
+    }
+    // Cache assets for a bit
+    res.setHeader('Cache-Control', 'public, max-age=604800');
+  }
+}));
+
+// Central error handler (must be after all routes/middleware)
+// Ensures unexpected errors return a clean JSON response instead of crashing the process.
+app.use((err, req, res, next) => {
+  console.error('[error]', err);
+  if (res.headersSent) return next(err);
+  res.status(500).json({ error: 'Internal server error' });
+});
+
+const server = app.listen(PORT, () => {
   console.log(`Server listening on http://localhost:${PORT}`);
+});
+
+server.on('error', (err) => {
+  if (err && err.code === 'EADDRINUSE') {
+    console.error(`\n[error] Port ${PORT} is already in use.`);
+    console.error('Close the other process using this port, or set PORT in .env (e.g. PORT=3001).\n');
+    process.exit(1);
+  }
+  throw err;
 });
