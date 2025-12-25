@@ -108,7 +108,7 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Scroll animations
     function initScrollAnimations() {
-        const animationElements = document.querySelectorAll('.service-item, .project-card, .highlight-item, .stat-item');
+        const animationElements = document.querySelectorAll('.service-item, .project-card, .highlight-item, .stat-item, .stat-item-left, .dashboard-card, .contact-form-container, .contact-info');
         
         const observer = new IntersectionObserver((entries) => {
             entries.forEach(entry => {

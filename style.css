@@ -1867,7 +1867,32 @@ body::after {
 }
 
 /* Testimonial Cards */
-.testimonial-quote {
+.testimonial-card {
+    background: radial-gradient(circle at top left, rgba(124, 58, 237, 0.22), rgba(15, 23, 42, 0.98));
+    border: 1px solid rgba(124, 58, 237, 0.6);
+}
+
+.testimonial-card .testimonial-quote {
+    color: #7c3aed;
+}
+
+.testimonial-card .testimonial-text {
+    color: #e5e7eb;
+}
+
+.testimonial-card .testimonial-author {
+    color: #c4b5fd;
+}
+
+.testimonial-card .testimonial-verified .verified-text {
+    color: #22c55e;
+}
+
+.testimonial-card .testimonial-verified .verified-icon {
+    color: #22c55e;
+}
+
+.testimonial-card {
     font-size: 3rem;
     color: #3b82f6;
     font-weight: 300;
@@ -2214,7 +2239,8 @@ body::after {
 .contact-container {
     max-width: 1200px;
     margin: 0 auto;
-    padding: 0 2rem;
+    /* Match Professional Journey horizontal padding */
+    padding: 0 32px;
 }
 
 .contact-title {
@@ -2222,7 +2248,7 @@ body::after {
     font-size: 44px;
     font-weight: 700;
     margin-bottom: 25px;
-    margin-top: 100px;
+    margin-top: 0;
     text-align: center;
     color: #FFFFFF;
 }
@@ -2241,10 +2267,11 @@ body::after {
 .contact-content {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 100px;
+    gap: 32px; /* match dashboard-grid gap more closely */
     max-width: 1200px;
     margin: 0 auto;
-    padding: 0 80px;
+    /* Align with Professional Journey layout */
+    padding: 0 32px;
 }
 
 .contact-info h3 {
@@ -2317,23 +2344,39 @@ body::after {
 }
 
 .social-link {
-    width: 40px;
-    height: 40px;
+    width: 44px;
+    height: 44px;
     background: rgba(255, 255, 255, 0.05);
-    border-radius: 8px;
+    border-radius: 999px;
     display: flex;
     align-items: center;
     justify-content: center;
     text-decoration: none;
-    font-size: 1.2rem;
     transition: all 0.3s ease;
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+}
+
+.social-icon {
+    font-size: 0.9rem;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+}
+
+.social-icon-instagram {
+    background: radial-gradient(circle at 30% 30%, #fdf497, #fd5949 40%, #d6249f 70%, #285AEB 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+}
+
+.social-icon-linkedin {
+    color: #0a66c2;
 }
 
 .social-link:hover {
-    background: rgba(124, 58, 237, 0.2);
-    border-color: rgba(124, 58, 237, 0.3);
-    transform: translateY(-2px);
+    background: rgba(124, 58, 237, 0.18);
+    border-color: rgba(124, 58, 237, 0.4);
+    transform: translateY(-2px) scale(1.05);
 }
 
 .contact-form-container {
@@ -2341,8 +2384,10 @@ body::after {
     border-radius: 20px;
     padding: 40px;
     width: 100%;
-    max-width: 680px; /* increased width for "Let's Work Together" card */
+    max-width: 760px; /* slightly wider so the card visually matches Professional Journey cards */
     margin-left: auto;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: 0 18px 55px rgba(0, 0, 0, 0.75);
     transition:
         transform 0.4s cubic-bezier(0.22, 0.61, 0.36, 1),
         box-shadow 0.4s ease,
@@ -2778,7 +2823,9 @@ body::after {
 /* On large screens, let the Project Portfolio Breakdown card span two columns */
 @media (min-width: 1024px) {
     .dashboard-card.project-breakdown {
-        grid-column: span 2;
+        /* Make the Project Portfolio Breakdown card span the full row on large screens */
+        grid-column: 1 / -1;
+        max-width: 100%;
     }
 }
 

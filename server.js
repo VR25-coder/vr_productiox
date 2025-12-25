@@ -10,7 +10,8 @@ const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const jwt = require('jsonwebtoken');
 const { z } = require('zod');
-const db = require('./db');
+const { createClient } = require('@supabase/supabase-js');
+const db = require('./db_supabase');
 
 require('dotenv').config();
 
@@ -37,6 +38,26 @@ if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
 const JWT_SECRET = process.env.JWT_SECRET;
 if (!JWT_SECRET) {
   throw new Error('JWT_SECRET must be set (see .env.example)');
+}
+
+// Supabase (media storage)
+const SUPABASE_URL = process.env.SUPABASE_URL || '';
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+const SUPABASE_BUCKET = process.env.SUPABASE_BUCKET || 'media';
+
+let supabase = null;
+if (SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY) {
+  try {
+    supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+      auth: { persistSession: false }
+    });
+    console.log('[storage] Supabase Storage client initialised');
+  } catch (e) {
+    console.error('[storage] Failed to initialise Supabase client, falling back to local uploads:', e);
+    supabase = null;
+  }
+} else {
+  console.warn('[storage] SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY not set; using local uploads/ folder');
 }
 
 // Admin password storage: bcrypt hash persisted to data/admin_auth.json
@@ -314,24 +335,34 @@ app.post('/api/admin/password', requireAdmin, (req, res) => {
 });
 
 // Portfolio: public GET used by script.js
-app.get('/portfolio_data.json', (req, res) => {
-  const data = db.getPortfolio();
-  res.json(data);
+app.get('/portfolio_data.json', async (req, res) => {
+  try {
+    const data = await db.getPortfolio();
+    res.json(data);
+  } catch (e) {
+    console.error('Failed to get portfolio', e);
+    res.status(500).json({ error: 'Failed to load portfolio' });
+  }
 });
 
 // Portfolio: admin update
-app.put('/api/portfolio', requireAdmin, (req, res) => {
+app.put('/api/portfolio', requireAdmin, async (req, res) => {
   const parsed = portfolioSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: 'Invalid portfolio payload' });
 
-  db.setPortfolio(parsed.data);
-  res.json({ success: true });
+  try {
+    await db.setPortfolio(parsed.data);
+    res.json({ success: true });
+  } catch (e) {
+    console.error('Failed to save portfolio', e);
+    res.status(500).json({ error: 'Failed to save portfolio' });
+  }
 });
 
 // Media upload (images, video, etc.)
 // Expects JSON: { fileName, content, folder? } where content is a data URL or base64 string
-// NOTE: this is intentionally strict to keep deployments safe.
-app.post('/api/upload', requireAdmin, uploadLimiter, (req, res) => {
+// If Supabase is configured, files are stored in remote object storage; otherwise local uploads/ is used.
+app.post('/api/upload', requireAdmin, uploadLimiter, async (req, res) => {
   try {
     const { fileName, content, folder } = req.body || {};
     if (!fileName || !content) {
@@ -350,11 +381,6 @@ app.post('/api/upload', requireAdmin, uploadLimiter, (req, res) => {
     // Restrict folders to prevent arbitrary path creation
     const requestedFolder = folder ? String(folder) : '';
     const safeFolder = ['images', 'videos', 'docs', 'branding'].includes(requestedFolder) ? requestedFolder : '';
-    const targetDir = safeFolder ? path.join(uploadsDir, safeFolder) : uploadsDir;
-
-    if (!fs.existsSync(targetDir)) {
-      fs.mkdirSync(targetDir, { recursive: true });
-    }
 
     let base64 = String(content);
     const commaIndex = base64.indexOf(',');
@@ -370,13 +396,56 @@ app.post('/api/upload', requireAdmin, uploadLimiter, (req, res) => {
       return res.status(413).json({ error: 'File too large' });
     }
 
+    // If Supabase is configured, prefer remote object storage so media is not lost on redeploy.
+    if (supabase) {
+      const supabasePath = (safeFolder ? safeFolder + '/' : '') + safeName;
+
+      // Very small mime-type map based on extension
+      const mimeMap = {
+        '.png': 'image/png',
+        '.jpg': 'image/jpeg',
+        '.jpeg': 'image/jpeg',
+        '.jfif': 'image/jpeg',
+        '.webp': 'image/webp',
+        '.gif': 'image/gif',
+        '.mp4': 'video/mp4',
+        '.mov': 'video/quicktime',
+        '.pdf': 'application/pdf'
+      };
+      const contentType = mimeMap[ext] || 'application/octet-stream';
+
+      const { error: uploadError } = await supabase.storage
+        .from(SUPABASE_BUCKET)
+        .upload(supabasePath, buffer, {
+          cacheControl: '31536000',
+          upsert: false,
+          contentType
+        });
+
+      if (uploadError) {
+        console.error('[storage] Supabase upload failed, falling back to local uploads:', uploadError);
+      } else {
+        const { data: publicData } = supabase.storage.from(SUPABASE_BUCKET).getPublicUrl(supabasePath);
+        const publicUrl = publicData && publicData.publicUrl ? publicData.publicUrl : null;
+        if (publicUrl) {
+          return res.json({ success: true, url: publicUrl, fileName: safeName, storage: 'supabase' });
+        }
+      }
+      // If we reach here, we fall through to local filesystem as a backup.
+    }
+
+    const targetDir = safeFolder ? path.join(uploadsDir, safeFolder) : uploadsDir;
+    if (!fs.existsSync(targetDir)) {
+      fs.mkdirSync(targetDir, { recursive: true });
+    }
+
     const filePath = path.join(targetDir, safeName);
     fs.writeFileSync(filePath, buffer);
 
     // Public URL path relative to site root
     const publicPath = '/uploads' + (safeFolder ? '/' + safeFolder : '') + '/' + safeName;
 
-    res.json({ success: true, url: publicPath, fileName: safeName });
+    res.json({ success: true, url: publicPath, fileName: safeName, storage: 'local' });
   } catch (e) {
     console.error('Upload failed', e);
     res.status(500).json({ error: 'Upload failed' });
@@ -384,7 +453,7 @@ app.post('/api/upload', requireAdmin, uploadLimiter, (req, res) => {
 });
 
 // Messages API
-app.post('/api/messages', (req, res) => {
+app.post('/api/messages', async (req, res) => {
   const parsed = messageSchema.safeParse(req.body || {});
   if (!parsed.success) {
     return res.status(400).json({ error: 'Invalid message payload' });
@@ -394,39 +463,65 @@ app.post('/api/messages', (req, res) => {
   const id = 'msg_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
   const createdAt = new Date().toISOString();
   const msg = { id, read: false, createdAt, ...parsed.data };
-  db.insertMessage(msg);
-  res.json({ success: true, id });
+
+  try {
+    await db.insertMessage(msg);
+    res.json({ success: true, id });
+  } catch (e) {
+    console.error('Failed to save message', e);
+    res.status(500).json({ error: 'Failed to save message' });
+  }
 });
 
-app.get('/api/messages', requireAdmin, (req, res) => {
-  const messages = db.getMessages();
-  res.json(messages);
+app.get('/api/messages', requireAdmin, async (req, res) => {
+  try {
+    const messages = await db.getMessages();
+    res.json(messages);
+  } catch (e) {
+    console.error('Failed to load messages', e);
+    res.status(500).json({ error: 'Failed to load messages' });
+  }
 });
 
-app.patch('/api/messages/:id', requireAdmin, (req, res) => {
+app.patch('/api/messages/:id', requireAdmin, async (req, res) => {
   const parsed = messagePatchSchema.safeParse(req.body || {});
   if (!parsed.success) return res.status(400).json({ error: 'Invalid payload' });
 
   const { id } = req.params;
-  const ok = db.updateMessage(id, parsed.data);
-  if (!ok) return res.status(404).json({ error: 'Not found' });
-  res.json({ success: true });
+  try {
+    const ok = await db.updateMessage(id, parsed.data);
+    if (!ok) return res.status(404).json({ error: 'Not found' });
+    res.json({ success: true });
+  } catch (e) {
+    console.error('Failed to update message', e);
+    res.status(500).json({ error: 'Failed to update message' });
+  }
 });
 
-app.delete('/api/messages/:id', requireAdmin, (req, res) => {
+app.delete('/api/messages/:id', requireAdmin, async (req, res) => {
   const { id } = req.params;
-  const ok = db.deleteMessage(id);
-  if (!ok) return res.status(404).json({ error: 'Not found' });
-  res.json({ success: true });
+  try {
+    const ok = await db.deleteMessage(id);
+    if (!ok) return res.status(404).json({ error: 'Not found' });
+    res.json({ success: true });
+  } catch (e) {
+    console.error('Failed to delete message', e);
+    res.status(500).json({ error: 'Failed to delete message' });
+  }
 });
 
 // Invoices API
-app.get('/api/invoices', requireAdmin, (req, res) => {
-  const invoices = db.getInvoices();
-  res.json(invoices);
+app.get('/api/invoices', requireAdmin, async (req, res) => {
+  try {
+    const invoices = await db.getInvoices();
+    res.json(invoices);
+  } catch (e) {
+    console.error('Failed to load invoices', e);
+    res.status(500).json({ error: 'Failed to load invoices' });
+  }
 });
 
-app.post('/api/invoices', requireAdmin, (req, res) => {
+app.post('/api/invoices', requireAdmin, async (req, res) => {
   const parsed = invoiceCreateSchema.safeParse(req.body || {});
   if (!parsed.success) return res.status(400).json({ error: 'Invalid invoice payload' });
 
@@ -440,294 +535,316 @@ app.post('/api/invoices', requireAdmin, (req, res) => {
     ...parsed.data
   };
 
-  db.insertInvoice(inv);
-  res.json({ success: true, id });
+  try {
+    await db.insertInvoice(inv);
+    res.json({ success: true, id });
+  } catch (e) {
+    console.error('Failed to create invoice', e);
+    res.status(500).json({ error: 'Failed to create invoice' });
+  }
 });
 
-app.patch('/api/invoices/:id', requireAdmin, (req, res) => {
+app.patch('/api/invoices/:id', requireAdmin, async (req, res) => {
   const parsed = invoicePatchSchema.safeParse(req.body || {});
   if (!parsed.success) return res.status(400).json({ error: 'Invalid payload' });
 
   const { id } = req.params;
-  const ok = db.patchInvoice(id, parsed.data);
-  if (!ok) return res.status(404).json({ error: 'Not found' });
-  res.json({ success: true });
+  try {
+    const ok = await db.patchInvoice(id, parsed.data);
+    if (!ok) return res.status(404).json({ error: 'Not found' });
+    res.json({ success: true });
+  } catch (e) {
+    console.error('Failed to update invoice', e);
+    res.status(500).json({ error: 'Failed to update invoice' });
+  }
 });
 
 // Delete invoice
-app.delete('/api/invoices/:id', requireAdmin, (req, res) => {
+app.delete('/api/invoices/:id', requireAdmin, async (req, res) => {
   const { id } = req.params;
-  const ok = db.deleteInvoice(id);
-  if (!ok) return res.status(404).json({ error: 'Not found' });
-  res.json({ success: true });
+  try {
+    const ok = await db.deleteInvoice(id);
+    if (!ok) return res.status(404).json({ error: 'Not found' });
+    res.json({ success: true });
+  } catch (e) {
+    console.error('Failed to delete invoice', e);
+    res.status(500).json({ error: 'Failed to delete invoice' });
+  }
 });
 
 // Invoice PDF download with modern A4 SaaS-style layout
-app.get('/api/invoices/:id/pdf', requireAdmin, (req, res) => {
-  const { id } = req.params;
-  const inv = db.getInvoiceById(id);
-  if (!inv) return res.status(404).json({ error: 'Not found' });
-
-  res.setHeader('Content-Type', 'application/pdf');
-  res.setHeader('Content-Disposition', `attachment; filename="${id}.pdf"`);
-
-  const footer = inv.footer || {};
-  const logoUrl = footer.logoUrl ? String(footer.logoUrl) : '';
-  const logoPathFallback = path.join(publicDir, 'logo.jpg');
-  const logoPathFromUploads = (() => {
-    if (!logoUrl) return null;
-    if (!logoUrl.startsWith('/uploads/')) return null;
-    const rel = logoUrl.replace(/^\//, '');
-    const resolved = path.resolve(__dirname, rel);
-    const uploadsRoot = path.resolve(uploadsDir);
-    const withinUploads = resolved === uploadsRoot || resolved.startsWith(uploadsRoot + path.sep);
-    if (!withinUploads) return null;
-    return resolved;
-  })();
-
-  const doc = new PDFDocument({
-    size: 'A4',
-    margins: { top: 48, left: 48, right: 48, bottom: 64 }
-  });
-
-  doc.pipe(res);
-
-  const pageWidth = doc.page.width;
-  const pageHeight = doc.page.height;
-  const marginLeft = doc.page.margins.left;
-  const marginRight = doc.page.margins.right;
-  const contentWidth = pageWidth - marginLeft - marginRight;
-
-  const primaryBlue = '#4F6EF7';
-  const textBlack = '#111827';
-  const textSecondary = '#6B7280';
-  const borderColor = '#E5E7EB';
-
-  const currencyCode = (inv.currency || 'US$').trim();
-  const formatMoney = (value) => `${currencyCode} ${Number(value || 0).toFixed(2)}`;
-
-  const clientName = inv.clientName || '';
-  const clientAddress = inv.clientAddress || '';
-  const clientCity = inv.clientCity || '';
-
-  const businessName = footer.businessName || 'VR PRODUCTIONS';
-  const businessAddress = footer.address || 'Nagpur, Maharashtra, India';
-  const businessCity = footer.city || 'Nagpur, Maharashtra, India';
-  const footerWebsite = footer.website || '';
-  const footerEmail = footer.email || '';
-  const footerPhone = footer.phone || '';
-
-  const createdAt = inv.createdAt ? new Date(inv.createdAt) : new Date();
-  const invoiceDate = (inv.invoiceDate && String(inv.invoiceDate).trim())
-    ? String(inv.invoiceDate).trim()
-    : createdAt.toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' });
-
-  const baseDueDate = createdAt;
-  const explicitDue = inv.dueDate && String(inv.dueDate).trim();
-  const dueDateObj = explicitDue ? new Date(explicitDue) : new Date(baseDueDate.getTime() + 15 * 24 * 60 * 60 * 1000);
-  const dueDate = dueDateObj.toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' });
-
-  const invoiceNumber = inv.projectId || inv.id;
-  const reference = (inv.reference && String(inv.reference).trim()) || invoiceNumber;
-
-  const services = Array.isArray(inv.services) ? inv.services : [];
-
-  let subtotal = 0;
-  services.forEach((s) => {
-    const amount = s.amount != null ? Number(s.amount) : (Number(s.quantity || 0) * Number(s.rate || 0));
-    if (!Number.isNaN(amount)) subtotal += amount;
-  });
-
-  const taxPercent = 10;
-  const taxAmount = subtotal * taxPercent / 100;
-  const total = subtotal + taxAmount;
-
-  // TOP LEFT: INVOICE title
-  let cursorY = doc.page.margins.top;
-  doc.fillColor(textBlack).font('Helvetica-Bold').fontSize(26).text('INVOICE', marginLeft, cursorY, {
-    width: contentWidth / 2,
-    align: 'left'
-  });
-
-  // TOP RIGHT: Logo + company info
-  const rightBlockWidth = contentWidth / 2;
-  const rightBlockX = pageWidth - marginRight - rightBlockWidth;
-
-  let rightY = cursorY;
+app.get('/api/invoices/:id/pdf', requireAdmin, async (req, res) => {
   try {
-    const lp = (logoPathFromUploads && fs.existsSync(logoPathFromUploads))
-      ? logoPathFromUploads
-      : (fs.existsSync(logoPathFallback) ? logoPathFallback : null);
-    if (lp) {
-      const logoWidth = 72;
-      doc.image(lp, rightBlockX + rightBlockWidth - logoWidth, rightY, { width: logoWidth });
-      rightY += 72 + 8;
+    const { id } = req.params;
+    const inv = await db.getInvoiceById(id);
+    if (!inv) return res.status(404).json({ error: 'Not found' });
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${id}.pdf"`);
+
+    const footer = inv.footer || {};
+    const logoUrl = footer.logoUrl ? String(footer.logoUrl) : '';
+    const logoPathFallback = path.join(publicDir, 'logo.jpg');
+    const logoPathFromUploads = (() => {
+      if (!logoUrl) return null;
+      if (!logoUrl.startsWith('/uploads/')) return null;
+      const rel = logoUrl.replace(/^\//, '');
+      const resolved = path.resolve(__dirname, rel);
+      const uploadsRoot = path.resolve(uploadsDir);
+      const withinUploads = resolved === uploadsRoot || resolved.startsWith(uploadsRoot + path.sep);
+      if (!withinUploads) return null;
+      return resolved;
+    })();
+
+    const doc = new PDFDocument({
+      size: 'A4',
+      margins: { top: 48, left: 48, right: 48, bottom: 64 }
+    });
+
+    doc.pipe(res);
+
+    const pageWidth = doc.page.width;
+    const pageHeight = doc.page.height;
+    const marginLeft = doc.page.margins.left;
+    const marginRight = doc.page.margins.right;
+    const contentWidth = pageWidth - marginLeft - marginRight;
+
+    const primaryBlue = '#4F6EF7';
+    const textBlack = '#111827';
+    const textSecondary = '#6B7280';
+    const borderColor = '#E5E7EB';
+
+    const currencyCode = (inv.currency || 'US$').trim();
+    const formatMoney = (value) => `${currencyCode} ${Number(value || 0).toFixed(2)}`;
+
+    const clientName = inv.clientName || '';
+    const clientAddress = inv.clientAddress || '';
+    const clientCity = inv.clientCity || '';
+
+    const businessName = footer.businessName || 'VR PRODUCTIONS';
+    const businessAddress = footer.address || 'Nagpur, Maharashtra, India';
+    const businessCity = footer.city || 'Nagpur, Maharashtra, India';
+    const footerWebsite = footer.website || '';
+    const footerEmail = footer.email || '';
+    const footerPhone = footer.phone || '';
+
+    const createdAt = inv.createdAt ? new Date(inv.createdAt) : new Date();
+    const invoiceDate = (inv.invoiceDate && String(inv.invoiceDate).trim())
+      ? String(inv.invoiceDate).trim()
+      : createdAt.toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' });
+
+    const baseDueDate = createdAt;
+    const explicitDue = inv.dueDate && String(inv.dueDate).trim();
+    const dueDateObj = explicitDue ? new Date(explicitDue) : new Date(baseDueDate.getTime() + 15 * 24 * 60 * 60 * 1000);
+    const dueDate = dueDateObj.toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' });
+
+    const invoiceNumber = inv.projectId || inv.id;
+    const reference = (inv.reference && String(inv.reference).trim()) || invoiceNumber;
+
+    const services = Array.isArray(inv.services) ? inv.services : [];
+
+    let subtotal = 0;
+    services.forEach((s) => {
+      const amount = s.amount != null ? Number(s.amount) : (Number(s.quantity || 0) * Number(s.rate || 0));
+      if (!Number.isNaN(amount)) subtotal += amount;
+    });
+
+    const taxPercent = 10;
+    const taxAmount = subtotal * taxPercent / 100;
+    const total = subtotal + taxAmount;
+
+    // TOP LEFT: INVOICE title
+    let cursorY = doc.page.margins.top;
+    doc.fillColor(textBlack).font('Helvetica-Bold').fontSize(26).text('INVOICE', marginLeft, cursorY, {
+      width: contentWidth / 2,
+      align: 'left'
+    });
+
+    // TOP RIGHT: Logo + company info
+    const rightBlockWidth = contentWidth / 2;
+    const rightBlockX = pageWidth - marginRight - rightBlockWidth;
+
+    let rightY = cursorY;
+    try {
+      const lp = (logoPathFromUploads && fs.existsSync(logoPathFromUploads))
+        ? logoPathFromUploads
+        : (fs.existsSync(logoPathFallback) ? logoPathFallback : null);
+      if (lp) {
+        const logoWidth = 72;
+        doc.image(lp, rightBlockX + rightBlockWidth - logoWidth, rightY, { width: logoWidth });
+        rightY += 72 + 8;
+      }
+    } catch {
+      // ignore logo errors
     }
-  } catch {
-    // ignore logo errors
-  }
 
-  doc.fillColor(primaryBlue).font('Helvetica-Bold').fontSize(12)
-    .text(businessName, rightBlockX, rightY, { width: rightBlockWidth, align: 'right' });
-  rightY += 18;
+    doc.fillColor(primaryBlue).font('Helvetica-Bold').fontSize(12)
+      .text(businessName, rightBlockX, rightY, { width: rightBlockWidth, align: 'right' });
+    rightY += 18;
 
-  doc.fillColor(textSecondary).font('Helvetica').fontSize(9);
-  if (businessAddress) {
-    doc.text(businessAddress, rightBlockX, rightY, { width: rightBlockWidth, align: 'right' });
-    rightY += 14;
-  }
-  if (businessCity) {
-    doc.text(businessCity, rightBlockX, rightY, { width: rightBlockWidth, align: 'right' });
-    rightY += 14;
-  }
+    doc.fillColor(textSecondary).font('Helvetica').fontSize(9);
+    if (businessAddress) {
+      doc.text(businessAddress, rightBlockX, rightY, { width: rightBlockWidth, align: 'right' });
+      rightY += 14;
+    }
+    if (businessCity) {
+      doc.text(businessCity, rightBlockX, rightY, { width: rightBlockWidth, align: 'right' });
+      rightY += 14;
+    }
 
-  // BILLED TO
-  cursorY += 64;
-  doc.fillColor(textSecondary).font('Helvetica').fontSize(9)
-    .text('Billed to', marginLeft, cursorY);
-  cursorY += 14;
-
-  doc.fillColor(textBlack).font('Helvetica-Bold').fontSize(11)
-    .text(clientName || '', marginLeft, cursorY, { width: contentWidth / 2 });
-  cursorY += 16;
-
-  doc.fillColor(textSecondary).font('Helvetica').fontSize(9);
-  if (clientAddress) {
-    doc.text(clientAddress, marginLeft, cursorY, { width: contentWidth / 2 });
-    cursorY += 14;
-  }
-  if (clientCity) {
-    doc.text(clientCity, marginLeft, cursorY, { width: contentWidth / 2 });
-    cursorY += 14;
-  }
-
-  // LEFT META DATA COLUMN
-  cursorY += 12;
-  const metaX = marginLeft;
-  let metaY = cursorY;
-
-  const metaRow = (label, value) => {
+    // BILLED TO
+    cursorY += 64;
     doc.fillColor(textSecondary).font('Helvetica').fontSize(9)
-      .text(label, metaX, metaY);
-    metaY += 12;
-    doc.fillColor(textBlack).font('Helvetica-Bold').fontSize(10)
-      .text(value || '-', metaX, metaY);
-    metaY += 20;
-  };
+      .text('Billed to', marginLeft, cursorY);
+    cursorY += 14;
 
-  metaRow('Invoice #', invoiceNumber || '-');
-  metaRow('Invoice date', invoiceDate || '-');
-  metaRow('Reference', reference || '-');
-  metaRow('Due date', dueDate || '-');
+    doc.fillColor(textBlack).font('Helvetica-Bold').fontSize(11)
+      .text(clientName || '', marginLeft, cursorY, { width: contentWidth / 2 });
+    cursorY += 16;
 
-  // SERVICES TABLE
-  // Position table just below the meta block to avoid overlap
-  const tableTop = metaY + 16;
-  const tableX = marginLeft;
-  const rowHeight = 22;
-  const headerHeight = 24;
+    doc.fillColor(textSecondary).font('Helvetica').fontSize(9);
+    if (clientAddress) {
+      doc.text(clientAddress, marginLeft, cursorY, { width: contentWidth / 2 });
+      cursorY += 14;
+    }
+    if (clientCity) {
+      doc.text(clientCity, marginLeft, cursorY, { width: contentWidth / 2 });
+      cursorY += 14;
+    }
 
-  // Limit number of visible service rows to keep everything on a single page
-  const maxRows = 10;
-  const visibleServices = services.slice(0, maxRows);
-  const bodyHeight = Math.max(1, visibleServices.length) * rowHeight + 8;
-  const tableHeight = headerHeight + bodyHeight + 8;
+    // LEFT META DATA COLUMN
+    cursorY += 12;
+    const metaX = marginLeft;
+    let metaY = cursorY;
 
-  const servicesColWidth = contentWidth * 0.5;
-  const qtyColWidth = contentWidth * 0.1;
-  const rateColWidth = contentWidth * 0.2;
-  const totalColWidth = contentWidth * 0.2;
+    const metaRow = (label, value) => {
+      doc.fillColor(textSecondary).font('Helvetica').fontSize(9)
+        .text(label, metaX, metaY);
+      metaY += 12;
+      doc.fillColor(textBlack).font('Helvetica-Bold').fontSize(10)
+        .text(value || '-', metaX, metaY);
+      metaY += 20;
+    };
 
-  const qtyX = tableX + servicesColWidth;
-  const rateX = qtyX + qtyColWidth;
-  const lineTotalX = rateX + rateColWidth;
+    metaRow('Invoice #', invoiceNumber || '-');
+    metaRow('Invoice date', invoiceDate || '-');
+    metaRow('Reference', reference || '-');
+    metaRow('Due date', dueDate || '-');
 
-  doc.lineWidth(1).strokeColor(borderColor).roundedRect(tableX, tableTop, contentWidth, tableHeight, 6).stroke();
+    // SERVICES TABLE
+    // Position table just below the meta block to avoid overlap
+    const tableTop = metaY + 16;
+    const tableX = marginLeft;
+    const rowHeight = 22;
+    const headerHeight = 24;
 
-  const headerY = tableTop + 10;
-  doc.fillColor(textSecondary).font('Helvetica-Bold').fontSize(9);
-  doc.text('Services', tableX + 12, headerY, { width: servicesColWidth - 24, align: 'left', lineBreak: false });
-  doc.text('Qty', qtyX, headerY, { width: qtyColWidth, align: 'center', lineBreak: false });
-  doc.text('Rate', rateX, headerY, { width: rateColWidth - 8, align: 'right', lineBreak: false });
-  doc.text('Line total', lineTotalX, headerY, { width: totalColWidth - 8, align: 'right', lineBreak: false });
+    // Limit number of visible service rows to keep everything on a single page
+    const maxRows = 10;
+    const visibleServices = services.slice(0, maxRows);
+    const bodyHeight = Math.max(1, visibleServices.length) * rowHeight + 8;
+    const tableHeight = headerHeight + bodyHeight + 8;
 
-  let rowY = headerY + headerHeight - 6;
-  doc.strokeColor(borderColor).moveTo(tableX, rowY).lineTo(tableX + contentWidth, rowY).stroke();
+    const servicesColWidth = contentWidth * 0.5;
+    const qtyColWidth = contentWidth * 0.1;
+    const rateColWidth = contentWidth * 0.2;
+    const totalColWidth = contentWidth * 0.2;
 
-  doc.font('Helvetica').fontSize(9).fillColor(textBlack);
-  visibleServices.forEach((s, index) => {
-    const y = rowY + 4 + index * rowHeight;
-    const name = (s.name || '').trim();
-    const qtyVal = s.quantity != null ? String(s.quantity) : '';
-    const rateVal = s.rate != null ? formatMoney(s.rate) : '';
-    const amountVal = s.amount != null ? formatMoney(s.amount) : formatMoney((s.quantity || 0) * (s.rate || 0));
+    const qtyX = tableX + servicesColWidth;
+    const rateX = qtyX + qtyColWidth;
+    const lineTotalX = rateX + rateColWidth;
 
-    doc.text(name, tableX + 12, y, {
-      width: servicesColWidth - 24,
-      align: 'left',
-      lineBreak: false
+    doc.lineWidth(1).strokeColor(borderColor).roundedRect(tableX, tableTop, contentWidth, tableHeight, 6).stroke();
+
+    const headerY = tableTop + 10;
+    doc.fillColor(textSecondary).font('Helvetica-Bold').fontSize(9);
+    doc.text('Services', tableX + 12, headerY, { width: servicesColWidth - 24, align: 'left', lineBreak: false });
+    doc.text('Qty', qtyX, headerY, { width: qtyColWidth, align: 'center', lineBreak: false });
+    doc.text('Rate', rateX, headerY, { width: rateColWidth - 8, align: 'right', lineBreak: false });
+    doc.text('Line total', lineTotalX, headerY, { width: totalColWidth - 8, align: 'right', lineBreak: false });
+
+    let rowY = headerY + headerHeight - 6;
+    doc.strokeColor(borderColor).moveTo(tableX, rowY).lineTo(tableX + contentWidth, rowY).stroke();
+
+    doc.font('Helvetica').fontSize(9).fillColor(textBlack);
+    visibleServices.forEach((s, index) => {
+      const y = rowY + 4 + index * rowHeight;
+      const name = (s.name || '').trim();
+      const qtyVal = s.quantity != null ? String(s.quantity) : '';
+      const rateVal = s.rate != null ? formatMoney(s.rate) : '';
+      const amountVal = s.amount != null ? formatMoney(s.amount) : formatMoney((s.quantity || 0) * (s.rate || 0));
+
+      doc.text(name, tableX + 12, y, {
+        width: servicesColWidth - 24,
+        align: 'left',
+        lineBreak: false
+      });
+      doc.fillColor(textSecondary).text(qtyVal, qtyX, y, {
+        width: qtyColWidth,
+        align: 'center',
+        lineBreak: false
+      });
+      doc.fillColor(textBlack).text(rateVal, rateX, y, {
+        width: rateColWidth - 8,
+        align: 'right',
+        lineBreak: false
+      });
+      doc.text(amountVal, lineTotalX, y, {
+        width: totalColWidth - 8,
+        align: 'right',
+        lineBreak: false
+      });
+
+      doc.strokeColor(borderColor)
+        .moveTo(tableX, y + rowHeight)
+        .lineTo(tableX + contentWidth, y + rowHeight)
+        .stroke();
     });
-    doc.fillColor(textSecondary).text(qtyVal, qtyX, y, {
-      width: qtyColWidth,
-      align: 'center',
-      lineBreak: false
-    });
-    doc.fillColor(textBlack).text(rateVal, rateX, y, {
-      width: rateColWidth - 8,
-      align: 'right',
-      lineBreak: false
-    });
-    doc.text(amountVal, lineTotalX, y, {
-      width: totalColWidth - 8,
-      align: 'right',
-      lineBreak: false
-    });
 
-    doc.strokeColor(borderColor)
-      .moveTo(tableX, y + rowHeight)
-      .lineTo(tableX + contentWidth, y + rowHeight)
-      .stroke();
-  });
+    // TOTALS (BOTTOM RIGHT)
+    const totalsX = tableX + contentWidth - 220;
+    const totalsY = tableTop + tableHeight + 24;
 
-  // TOTALS (BOTTOM RIGHT)
-  const totalsX = tableX + contentWidth - 220;
-  const totalsY = tableTop + tableHeight + 24;
+    const lineTotals = (label, value, opts = {}) => {
+      const { bold = false, color = textSecondary } = opts;
+      doc.fillColor(color).font(bold ? 'Helvetica-Bold' : 'Helvetica').fontSize(10);
+      doc.text(label, totalsX, totalsY + (opts.offsetY || 0), { width: 120, align: 'left' });
+      doc.text(value, totalsX + 120, totalsY + (opts.offsetY || 0), { width: 100, align: 'right' });
+    };
 
-  const line = (label, value, opts = {}) => {
-    const { bold = false, color = textSecondary } = opts;
-    doc.fillColor(color).font(bold ? 'Helvetica-Bold' : 'Helvetica').fontSize(10);
-    doc.text(label, totalsX, totalsY + (opts.offsetY || 0), { width: 120, align: 'left' });
-    doc.text(value, totalsX + 120, totalsY + (opts.offsetY || 0), { width: 100, align: 'right' });
-  };
+    lineTotals('Subtotal', formatMoney(subtotal), { offsetY: 0, color: textBlack });
+    lineTotals(`Tax (${taxPercent}%)`, formatMoney(taxAmount), { offsetY: 18, color: textBlack });
+    lineTotals('Total due', formatMoney(total), { offsetY: 40, bold: true, color: primaryBlue });
 
-  line('Subtotal', formatMoney(subtotal), { offsetY: 0, color: textBlack });
-  line(`Tax (${taxPercent}%)`, formatMoney(taxAmount), { offsetY: 18, color: textBlack });
-  line('Total due', formatMoney(total), { offsetY: 40, bold: true, color: primaryBlue });
+    // PAYMENT NOTE (CENTERED)
+    const noteY = totalsY + 72;
+    doc.fillColor(textSecondary).font('Helvetica-Oblique').fontSize(9)
+      .text('Please pay within 15 days of receiving this invoice.', marginLeft, noteY, {
+        width: contentWidth,
+        align: 'center',
+        lineBreak: false
+      });
 
-  // PAYMENT NOTE (CENTERED)
-  const noteY = totalsY + 72;
-  doc.fillColor(textSecondary).font('Helvetica-Oblique').fontSize(9)
-    .text('Please pay within 15 days of receiving this invoice.', marginLeft, noteY, {
-      width: contentWidth,
-      align: 'center',
-      lineBreak: false
-    });
+    // FOOTER CONTACT (BOTTOM) — keep safely within bottom margin so it never flows to a new page
+    const footerY = pageHeight - doc.page.margins.bottom - 20;
+    doc.fillColor(textSecondary).font('Helvetica').fontSize(8);
 
-  // FOOTER CONTACT (BOTTOM) — keep safely within bottom margin so it never flows to a new page
-  const footerY = pageHeight - doc.page.margins.bottom - 20;
-  doc.fillColor(textSecondary).font('Helvetica').fontSize(8);
+    if (footerWebsite) {
+      doc.text(footerWebsite, marginLeft, footerY, { width: contentWidth / 3, align: 'left' });
+    }
+    if (footerPhone) {
+      doc.text(footerPhone, marginLeft + contentWidth / 3, footerY, { width: contentWidth / 3, align: 'center' });
+    }
+    if (footerEmail) {
+      doc.text(footerEmail, marginLeft + (2 * contentWidth) / 3, footerY, { width: contentWidth / 3, align: 'right' });
+    }
 
-  if (footerWebsite) {
-    doc.text(footerWebsite, marginLeft, footerY, { width: contentWidth / 3, align: 'left' });
+    doc.end();
+  } catch (e) {
+    console.error('Failed to generate invoice PDF', e);
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'Failed to generate invoice PDF' });
+    }
   }
-  if (footerPhone) {
-    doc.text(footerPhone, marginLeft + contentWidth / 3, footerY, { width: contentWidth / 3, align: 'center' });
-  }
-  if (footerEmail) {
-    doc.text(footerEmail, marginLeft + (2 * contentWidth) / 3, footerY, { width: contentWidth / 3, align: 'right' });
-  }
-
-  doc.end();
 });
 
 app.get('/healthz', (req, res) => {

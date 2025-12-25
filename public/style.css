@@ -196,6 +196,15 @@ body::after {
     padding: 0 2rem;
 }
 
+.brand-logo {
+    width: 52px;
+    height: 52px;
+    border-radius: 12px;
+    object-fit: contain;
+    border: 1px solid rgba(148, 163, 184, 0.4);
+    background: #020617;
+}
+
 .nav-brand h1 {
     font-size: 1.5rem;
     font-weight: 600;
@@ -2348,7 +2357,7 @@ body::after {
 .contact-container {
     max-width: 1200px;
     margin: 0 auto;
-    padding: 0 2rem;
+    padding: 0 32px; /* align with journey-container */
 }
 
 .contact-title {
@@ -2356,7 +2365,7 @@ body::after {
     font-size: 44px;
     font-weight: 700;
     margin-bottom: 25px;
-    margin-top: 100px;
+    margin-top: 0; /* remove extra gap so section aligns with Professional Journey */
     text-align: center;
     color: #FFFFFF;
 }
@@ -2375,10 +2384,10 @@ body::after {
 .contact-content {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 100px;
+    gap: 32px; /* match dashboard-grid gap closely */
     max-width: 1200px;
     margin: 0 auto;
-    padding: 0 80px;
+    padding: 0 32px; /* match journey-container padding */
 }
 
 .contact-info h3 {
@@ -2451,23 +2460,26 @@ body::after {
 }
 
 .social-link {
-    width: 40px;
-    height: 40px;
+    width: 44px;
+    height: 44px;
     background: rgba(255, 255, 255, 0.05);
-    border-radius: 8px;
+    border-radius: 999px;
     display: flex;
     align-items: center;
     justify-content: center;
     text-decoration: none;
-    font-size: 1.2rem;
     transition: all 0.3s ease;
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+}
+
+.social-svg {
+    display: block;
 }
 
 .social-link:hover {
-    background: rgba(124, 58, 237, 0.2);
-    border-color: rgba(124, 58, 237, 0.3);
-    transform: translateY(-2px);
+    background: rgba(124, 58, 237, 0.18);
+    border-color: rgba(124, 58, 237, 0.4);
+    transform: translateY(-2px) scale(1.05);
 }
 
 .contact-form-container {
