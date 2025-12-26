@@ -9,6 +9,7 @@ const bcrypt = require('bcryptjs');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const jwt = require('jsonwebtoken');
+const nodemailer = require('nodemailer');
 const { z } = require('zod');
 const { createClient } = require('@supabase/supabase-js');
 const db = require('./db_supabase');
@@ -58,6 +59,34 @@ if (SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY) {
   }
 } else {
   console.warn('[storage] SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY not set; using local uploads/ folder');
+}
+
+// Optional SMTP configuration for contact-form email notifications
+const SMTP_HOST = process.env.SMTP_HOST || '';
+const SMTP_PORT = Number(process.env.SMTP_PORT || 587);
+const SMTP_USER = process.env.SMTP_USER || '';
+const SMTP_PASS = process.env.SMTP_PASS || '';
+const MAIL_FROM = process.env.MAIL_FROM || '';
+const MAIL_TO = process.env.MAIL_TO || '';
+
+let mailTransporter = null;
+if (SMTP_HOST && SMTP_USER && SMTP_PASS) {
+  try {
+    mailTransporter = nodemailer.createTransport({
+      host: SMTP_HOST,
+      port: SMTP_PORT,
+      secure: SMTP_PORT === 465,
+      auth: {
+        user: SMTP_USER,
+        pass: SMTP_PASS
+      }
+    });
+  } catch (e) {
+    console.error('[mail] Failed to initialise SMTP transporter:', e);
+    mailTransporter = null;
+  }
+} else {
+  console.warn('[mail] SMTP settings not fully configured; contact-form emails will be skipped');
 }
 
 // Admin password storage: bcrypt hash persisted to data/admin_auth.json
@@ -452,6 +481,74 @@ app.post('/api/upload', requireAdmin, uploadLimiter, async (req, res) => {
   }
 });
 
+// Helper: send email notifications for contact messages (best-effort, non-blocking)
+async function sendContactEmails(message) {
+  if (!mailTransporter || !MAIL_FROM) return;
+
+  const adminRecipient = MAIL_TO || MAIL_FROM;
+  const fullName = `${message.first_name || ''} ${message.last_name || ''}`.trim() || 'Portfolio visitor';
+  const safeSubject = String(message.subject || '').slice(0, 120) || 'New portfolio enquiry';
+
+  const adminText = [
+    'New contact message received from your portfolio site:',
+    '',
+    `Name: ${fullName}`,
+    `Email: ${message.email || '-'}`,
+    '',
+    `Subject: ${message.subject || '-'}`,
+    '',
+    'Message:',
+    String(message.message || '').trim(),
+    '',
+    `Received at: ${message.createdAt || new Date().toISOString()}`
+  ].join('\n');
+
+  const userBody = `Hello,
+
+Thank you for contacting VR_Productiox.
+
+We’ve received your project enquiry and will get back to you within 24–48 hours with more details.
+
+Looking forward to connecting with you.
+
+Best regards,
+Vrutant Ratnapure
+Video Editor & Cinematographer
+VR_Productiox`;
+
+  const tasks = [];
+  tasks.push(
+    mailTransporter
+      .sendMail({
+        from: MAIL_FROM,
+        to: adminRecipient,
+        subject: `New portfolio enquiry: ${safeSubject}`,
+        text: adminText
+      })
+      .catch((e) => {
+        console.error('[mail] Failed to send admin contact email', e);
+      })
+  );
+
+  if (message.email) {
+    tasks.push(
+      mailTransporter
+        .sendMail({
+          from: MAIL_FROM,
+          to: message.email,
+          subject: 'Thank you for contacting VR_Productiox',
+          text: userBody,
+          html: userBody.replace(/\n/g, '<br>')
+        })
+        .catch((e) => {
+          console.error('[mail] Failed to send confirmation email to visitor', e);
+        })
+    );
+  }
+
+  await Promise.allSettled(tasks);
+}
+
 // Messages API
 app.post('/api/messages', async (req, res) => {
   const parsed = messageSchema.safeParse(req.body || {});
@@ -466,6 +563,12 @@ app.post('/api/messages', async (req, res) => {
 
   try {
     await db.insertMessage(msg);
+
+    // Fire-and-forget email notifications; do not fail the request if SMTP is misconfigured
+    sendContactEmails(msg).catch((e) => {
+      console.error('[mail] Contact email pipeline failed', e);
+    });
+
     res.json({ success: true, id });
   } catch (e) {
     console.error('Failed to save message', e);

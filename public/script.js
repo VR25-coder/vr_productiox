@@ -909,6 +909,64 @@ function playHospitalVideo(fileName) {
     document.body.appendChild(modal);
 }
 
+// One-time setup for client highlights scroll arrows and auto-nudge
+let clientHighlightsScrollBound = false;
+function setupClientHighlightsScrollHints(list) {
+    if (!list || clientHighlightsScrollBound) return;
+    clientHighlightsScrollBound = true;
+
+    const prev = document.querySelector('.client-highlights-prev');
+    const next = document.querySelector('.client-highlights-next');
+
+    const scrollByAmount = () => {
+        const vw = window.innerWidth || 0;
+        // Scroll roughly one card at a time, clamped to the list width.
+        const base = Math.max(220, Math.min(420, vw * 0.4));
+        return Math.min(base, list.scrollWidth);
+    };
+
+    const scrollByDir = (dir) => {
+        const amount = scrollByAmount();
+        if (!amount) return;
+        list.scrollBy({ left: dir * amount, behavior: 'smooth' });
+    };
+
+    if (prev) prev.addEventListener('click', () => scrollByDir(-1));
+    if (next) next.addEventListener('click', () => scrollByDir(1));
+
+    // Gentle auto-nudge the first time the strip enters the viewport
+    try {
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach((entry) => {
+                if (!entry.isIntersecting) return;
+
+                const maxScrollable = list.scrollWidth - list.clientWidth;
+                if (maxScrollable <= 0) {
+                    observer.disconnect();
+                    return;
+                }
+
+                const nudge = Math.min(maxScrollable, scrollByAmount() * 0.5);
+                if (!nudge) {
+                    observer.disconnect();
+                    return;
+                }
+
+                list.scrollBy({ left: nudge, behavior: 'smooth' });
+                setTimeout(() => {
+                    list.scrollBy({ left: -nudge * 0.5, behavior: 'smooth' });
+                }, 700);
+
+                observer.disconnect();
+            });
+        }, { threshold: 0.3 });
+
+        observer.observe(list);
+    } catch (e) {
+        // If IntersectionObserver is not available, skip the auto-nudge.
+    }
+}
+
 // Load portfolio content from JSON and apply to the public site
 async function loadPortfolioContentFromJSON() {
     try {
@@ -967,9 +1025,32 @@ async function loadPortfolioContentFromJSON() {
 
         // Personal / hero text
         if (data.personal) {
-            const availability = document.querySelector('.availability-status span');
-            if (availability && data.personal.availability) {
-                availability.textContent = data.personal.availability;
+            const availabilityTextEl = document.querySelector('.availability-status span');
+            if (availabilityTextEl && data.personal.availability) {
+                availabilityTextEl.textContent = data.personal.availability;
+
+                // Visually reflect availability state (green for "Available", red for "Not Available" / "Off")
+                const wrapper = document.querySelector('.availability-status');
+                const dot = wrapper && wrapper.querySelector('.status-dot');
+                if (wrapper && dot) {
+                    wrapper.classList.remove('availability-status--available', 'availability-status--unavailable');
+                    dot.classList.remove('status-dot--available', 'status-dot--unavailable');
+
+                    const label = String(data.personal.availability || '').trim().toLowerCase();
+                    const isUnavailable =
+                        label === 'not available for projects' ||
+                        label === 'not available' ||
+                        label === 'unavailable' ||
+                        label === 'off';
+
+                    if (isUnavailable) {
+                        wrapper.classList.add('availability-status--unavailable');
+                        dot.classList.add('status-dot--unavailable');
+                    } else {
+                        wrapper.classList.add('availability-status--available');
+                        dot.classList.add('status-dot--available');
+                    }
+                }
             }
 
             const heroTitle = document.querySelector('.hero-title');
@@ -1296,6 +1377,16 @@ async function loadPortfolioContentFromJSON() {
                     const meta = document.createElement('div');
                     meta.className = 'client-highlight-meta';
 
+                    // Optional avatar / source thumbnail to make the review card feel more genuine
+                    if (item.thumbnail) {
+                        const avatar = document.createElement('img');
+                        avatar.className = 'client-highlight-avatar';
+                        avatar.src = item.thumbnail;
+                        const baseName = authorName || item.platform || 'Client';
+                        avatar.alt = `${baseName} avatar`;
+                        meta.appendChild(avatar);
+                    }
+
                     if (item.title) {
                         const titleEl = document.createElement('h4');
                         titleEl.className = 'card-title';
@@ -1327,6 +1418,8 @@ async function loadPortfolioContentFromJSON() {
                         window.observeRevealElement(card);
                     }
                 });
+
+                setupClientHighlightsScrollHints(list);
             }
         } else if (Array.isArray(data.testimonials)) {
             // Backwards-compatibility: if no clientHighlights, map testimonials into highlight cards
@@ -1372,6 +1465,8 @@ async function loadPortfolioContentFromJSON() {
                         window.observeRevealElement(card);
                     }
                 });
+
+                setupClientHighlightsScrollHints(list);
             }
         }
 

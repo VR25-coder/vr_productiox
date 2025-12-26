@@ -195,8 +195,8 @@
             <div class="about-content">
                 <div class="about-text">
                     <h2 class="about-title">About Me</h2>
-                    <p class="about-intro">I am a freelance cinematographer and video editor, passionate about creating powerful visual stories that connect with audiences. From concept development and shooting supervision to editing, color grading, motion graphics, and finishing, I specialize in transforming raw footage into compelling narratives.</p>
-                    <p class="about-description">I've worked on diverse projects, blending artistic storytelling with technical precision, and I believe every frame has the power to leave a lasting impact. Alongside my creative work, I am also pursuing my B.Tech in Computer Science at G.H. Raisoni College of Engineering (GHRCE), with a growing interest in cybersecurity, ethical hacking, and system administration. Currently, I'm gaining hands-on experience in content creation and video production through my part-time role at Entrance Zone (Vatsala Academic).</p>
+                    <p class="about-intro">I'm a cinematographer and video editor focused on cinematic commercials, documentary narratives and digital-first campaigns.</p>
+                    <p class="about-description">I help brands, institutions and creators turn raw footage into clear, emotionally driven stories. From look development and pacing to colour and sound, I care about how each cut feels and how the overall film supports the message. Alongside client work, I'm pursuing a B.Tech in Computer Science at G.H. Raisoni College of Engineering (GHRCE), which gives me a strong technical base in areas such as cybersecurity and systems. I also work part-time as a Video Editor at Entrance Zone (Vatsala Academic), managing end-to-end production for education-focused content at scale.</p>
                     
                     <div class="skill-tags">
                         <span class="skill-tag">Premiere Pro</span>
@@ -411,30 +411,40 @@
 
             <!-- Lower container: client success highlights laid out row-wise -->
             <div class="journey-lower-list">
-                <h3 class="card-title">Clients Success Highlight</h3>
-                <div class="client-highlights-list">
-                    <!-- Fallback static cards (will be overridden by JSON data when available) -->
-                    <article class="client-highlight-card">
-                        <div class="client-highlight-main">
-                            <div class="testimonial-quote">“</div>
-                            <p class="testimonial-text">Vrutant transformed our vision into reality with exceptional and technical expertise. The commercial campaign exceeded our expectations and drove a 40% increase in engagement.</p>
-                            <p class="testimonial-author">– Edit Client 01 · Client</p>
-                        </div>
-                        <div class="client-highlight-meta">
-                            <p class="client-highlight-label">Verified project</p>
-                        </div>
-                    </article>
+                <div class="client-highlights-header">
+                    <h3 class="card-title">Clients Success Highlight</h3>
+                    <div class="client-highlights-controls" aria-hidden="true">
+                        <button type="button" class="client-highlights-arrow client-highlights-prev" aria-label="Scroll reviews left">‹</button>
+                        <button type="button" class="client-highlights-arrow client-highlights-next" aria-label="Scroll reviews right">›</button>
+                    </div>
+                </div>
+                <div class="client-highlights-shell">
+                    <div class="client-highlights-fade client-highlights-fade-left" aria-hidden="true"></div>
+                    <div class="client-highlights-fade client-highlights-fade-right" aria-hidden="true"></div>
+                    <div class="client-highlights-list">
+                        <!-- Fallback static cards (will be overridden by JSON data when available) -->
+                        <article class="client-highlight-card">
+                            <div class="client-highlight-main">
+                                <div class="testimonial-quote">“</div>
+                                <p class="testimonial-text">Vrutant transformed our vision into reality with exceptional and technical expertise. The commercial campaign exceeded our expectations and drove a 40% increase in engagement.</p>
+                                <p class="testimonial-author">– Edit Client 01 · Client</p>
+                            </div>
+                            <div class="client-highlight-meta">
+                                <p class="client-highlight-label">Verified project</p>
+                            </div>
+                        </article>
 
-                    <article class="client-highlight-card">
-                        <div class="client-highlight-main">
-                            <div class="testimonial-quote">“</div>
-                            <p class="testimonial-text">Working with Vrutant was smooth and professional from start to finish. The final video quality was outstanding.</p>
-                            <p class="testimonial-author">– Edit Client 02 · Client</p>
-                        </div>
-                        <div class="client-highlight-meta">
-                            <p class="client-highlight-label">Verified project</p>
-                        </div>
-                    </article>
+                        <article class="client-highlight-card">
+                            <div class="client-highlight-main">
+                                <div class="testimonial-quote">“</div>
+                                <p class="testimonial-text">Working with Vrutant was smooth and professional from start to finish. The final video quality was outstanding.</p>
+                                <p class="testimonial-author">– Edit Client 02 · Client</p>
+                            </div>
+                            <div class="client-highlight-meta">
+                                <p class="client-highlight-label">Verified project</p>
+                            </div>
+                        </article>
+                    </div>
                 </div>
             </div>
         </div>
@@ -619,11 +629,21 @@
 
                     <h4 class="social-heading">Follow Me</h4>
                     <div class="social-links">
-                        <a href="https://www.linkedin.com/in/vrutant-ratnapure-9a823a2a1?utm_source=share&utm_campaign=share_via&utm_content=profile&utm_medium=android_app" class="social-link" aria-label="LinkedIn">
-                            <span><i class="fab fa-linkedin"></i></span>
+                        <!-- LinkedIn (inline SVG so it is not blocked by CSP) -->
+                        <a href="https://www.linkedin.com/in/vrutant-ratnapure-9a823a2a1?utm_source=share&utm_campaign=share_via&utm_content=profile&utm_medium=android_app"
+                           class="social-link" aria-label="LinkedIn" target="_blank" rel="noopener noreferrer">
+                            <svg class="social-svg" viewBox="0 0 24 24" aria-hidden="true">
+                                <path fill="currentColor" d="M4.98 3.5C4.98 4.88 3.9 6 2.5 6S0 4.88 0 3.5 1.08 1 2.48 1s2.5 1.12 2.5 2.5zM.32 8.01H4.7V23H.32zM8.28 8.01h4.18v2.04h.06c.58-1.1 2-2.26 4.11-2.26 4.4 0 5.21 2.9 5.21 6.67V23h-4.38v-7.02c0-1.67-.03-3.82-2.33-3.82-2.34 0-2.7 1.82-2.7 3.7V23H8.28z"/>
+                            </svg>
                         </a>
-                        <a href="https://www.instagram.com/vr_productiox?igsh=cTh5MGMwaWp3aHc4" class="social-link" aria-label="Instagram">
-                            <span><i class="fab fa-instagram"></i></span>
+                        <!-- Instagram (inline SVG so it is not blocked by CSP) -->
+                        <a href="https://www.instagram.com/vr_productiox?igsh=cTh5MGMwaWp3aHc4"
+                           class="social-link" aria-label="Instagram" target="_blank" rel="noopener noreferrer">
+                            <svg class="social-svg" viewBox="0 0 24 24" aria-hidden="true">
+                                <path fill="currentColor" d="M12 7.3A4.7 4.7 0 1 0 16.7 12 4.71 4.71 0 0 0 12 7.3zm0 7.7A3 3 0 1 1 15 12a3 3 0 0 1-3 3z"/>
+                                <path fill="currentColor" d="M17.85 3H6.15A3.16 3.16 0 0 0 3 6.15v11.7A3.16 3.16 0 0 0 6.15 21h11.7A3.16 3.16 0 0 0 21 17.85V6.15A3.16 3.16 0 0 0 17.85 3zm1.36 14.85a1.36 1.36 0 0 1-1.36 1.36H6.15a1.36 1.36 0 0 1-1.36-1.36V6.15A1.36 1.36 0 0 1 6.15 4.79h11.7a1.36 1.36 0 0 1 1.36 1.36z"/>
+                                <circle fill="currentColor" cx="17.4" cy="6.6" r="1"/>
+                            </svg>
                         </a>
                     </div>
                 </div>
