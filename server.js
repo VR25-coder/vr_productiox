@@ -107,7 +107,56 @@ function writeJsonAtomic(file, value) {
   fs.renameSync(tmp, file);
 }
 
-function ensureAdminAuth() {
+// Supabase-backed admin auth (fallbacks to JSON if Supabase not configured)
+async function ensureAdminAuth() {
+  if (supabase) {
+    try {
+      const { data, error } = await supabase
+        .from('admin_auth')
+        .select('id, password_hash, updated_at')
+        .eq('id', 1)
+        .maybeSingle();
+
+      if (error) {
+        console.warn('[auth] Supabase admin_auth select failed (table missing or RLS?):', error.message || error);
+      }
+
+      if (data && data.password_hash) {
+        return { passwordHash: data.password_hash, updatedAt: data.updated_at };
+      }
+
+      // Seed into Supabase from local JSON or ADMIN_PASSWORD
+      const local = readJson(adminAuthFile, null);
+      let passwordHash;
+      if (local && typeof local.passwordHash === 'string' && local.passwordHash.length > 20) {
+        passwordHash = local.passwordHash;
+      } else {
+        const initialPassword = process.env.ADMIN_PASSWORD;
+        if (!initialPassword) {
+          throw new Error('ADMIN_PASSWORD must be set to seed Supabase admin_auth');
+        }
+        passwordHash = bcrypt.hashSync(String(initialPassword), 12);
+      }
+
+      const now = new Date().toISOString();
+      const { error: upsertError } = await supabase
+        .from('admin_auth')
+        .upsert({ id: 1, password_hash: passwordHash, updated_at: now }, { onConflict: 'id' });
+
+      if (upsertError) {
+        console.error('[auth] Supabase upsert admin_auth failed:', upsertError);
+        throw new Error('Supabase admin_auth table missing or misconfigured');
+      }
+
+      console.log('[auth] Seeded admin_auth in Supabase (id=1)');
+      return { passwordHash, updatedAt: now };
+    } catch (e) {
+      console.error('[auth] ensureAdminAuth (Supabase) crashed:', e);
+      throw e;
+    }
+  }
+
+  // Fallback to JSON file (local/dev)
   const stored = readJson(adminAuthFile, null);
   if (stored && typeof stored.passwordHash === 'string' && stored.passwordHash.length > 20) {
     return stored;
@@ -125,20 +174,32 @@ function ensureAdminAuth() {
   return next;
 }
 
-function verifyAdminPassword(password) {
-  const auth = ensureAdminAuth();
+async function verifyAdminPassword(password) {
   try {
+    const auth = await ensureAdminAuth();
     return bcrypt.compareSync(String(password || ''), auth.passwordHash);
   } catch {
     return false;
   }
 }
 
-function setAdminPassword(newPassword) {
+async function setAdminPassword(newPassword) {
   const passwordHash = bcrypt.hashSync(String(newPassword), 12);
   const next = { passwordHash, updatedAt: new Date().toISOString() };
-  writeJsonAtomic(adminAuthFile, next);
-  return { updatedAt: next.updatedAt };
+
+  if (supabase) {
+    const { error } = await supabase
+      .from('admin_auth')
+      .upsert({ id: 1, password_hash: next.passwordHash, updated_at: next.updatedAt }, { onConflict: 'id' });
+    if (error) {
+      console.error('[auth] Supabase setAdminPassword failed:', error);
+      throw new Error('Failed to save admin password to Supabase');
+    }
+  } else {
+    writeJsonAtomic(adminAuthFile, next);
+  }
+
+  return next;
 }
 
 // Middleware
@@ -339,9 +400,9 @@ const passwordChangeSchema = z
   .strict();
 
 // Login route
-app.post('/api/login', loginLimiter, (req, res) => {
+app.post('/api/login', loginLimiter, async (req, res) => {
   const { password } = req.body || {};
-  if (!verifyAdminPassword(password)) {
+  if (!(await verifyAdminPassword(password))) {
     return res.status(401).json({ error: 'Invalid credentials' });
   }
 
@@ -350,16 +411,16 @@ app.post('/api/login', loginLimiter, (req, res) => {
 });
 
 // Change admin password (requires current password)
-app.post('/api/admin/password', requireAdmin, (req, res) => {
+app.post('/api/admin/password', requireAdmin, async (req, res) => {
   const parsed = passwordChangeSchema.safeParse(req.body || {});
   if (!parsed.success) return res.status(400).json({ error: 'Invalid payload' });
 
   const { currentPassword, newPassword } = parsed.data;
-  if (!verifyAdminPassword(currentPassword)) {
+  if (!(await verifyAdminPassword(currentPassword))) {
     return res.status(401).json({ error: 'Invalid current password' });
   }
 
-  const info = setAdminPassword(newPassword);
+  const info = await setAdminPassword(newPassword);
   res.json({ success: true, ...info });
 });
 
