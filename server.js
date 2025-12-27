@@ -113,28 +113,38 @@ async function syncClientHighlightsToDB(items) {
   }
 }
 
-// Email via HTTP API (contact-form email notifications: Brevo with Resend fallback)
+// Mail config (Brevo primary, Resend optional)
 const MAIL_FROM = String(process.env.MAIL_FROM || '').trim().replace(/^["']|["']$/g, '');
 const MAIL_FROM_NAME = String(process.env.MAIL_FROM_NAME || '').trim();
 const MAIL_TO = process.env.MAIL_TO || '';
 const BREVO_API_KEY = process.env.BREVO_API_KEY || '';
 const RESEND_API_KEY = process.env.RESEND_API_KEY || '';
+const MAIL_REPLY_TO = String(process.env.MAIL_REPLY_TO || MAIL_FROM).trim();
 
 if (BREVO_API_KEY) {
-  console.log('[mail] Brevo API key detected; emails will be sent via HTTP API');
-}
-if (RESEND_API_KEY) {
-  console.log('[mail] Resend API key detected; fallback provider enabled');
-}
-if (!BREVO_API_KEY && !RESEND_API_KEY) {
-  console.warn('[mail] No mail provider configured; contact-form emails will be skipped');
+  console.log('[mail] Brevo configured; using Brevo for emails');
+} else if (RESEND_API_KEY) {
+  console.log('[mail] Resend configured; using Resend for emails');
+} else {
+  console.warn('[mail] No email provider configured; contact-form emails will be skipped');
 }
 
-// Helper for sending emails via Brevo HTTP API
+
+
+// Mail helpers: Brevo primary, Resend optional
 function sendBrevoEmail({ toEmail, subject, text, html }) {
   if (!BREVO_API_KEY || !MAIL_FROM) {
-    return Promise.reject(new Error('BREVO_API_KEY or MAIL_FROM missing'));
+    throw new Error('BREVO_API_KEY or MAIL_FROM missing');
   }
+
+  const payload = {
+    sender: { name: MAIL_FROM_NAME || 'VR Productiox', email: MAIL_FROM },
+    replyTo: { email: MAIL_REPLY_TO },
+    to: [{ email: toEmail }],
+    subject,
+    textContent: text,
+    htmlContent: html
+  };
 
   const url = 'https://api.brevo.com/v3/smtp/email';
   const headers = {
@@ -145,7 +155,6 @@ function sendBrevoEmail({ toEmail, subject, text, html }) {
   };
 
   const maxAttempts = 3;
-
   async function attemptSend() {
     let lastErr;
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
@@ -156,55 +165,33 @@ function sendBrevoEmail({ toEmail, subject, text, html }) {
         const res = await fetch(url, {
           method: 'POST',
           headers,
-          body: JSON.stringify({
-            sender: { name: MAIL_FROM_NAME || 'VR Productiox', email: MAIL_FROM },
-            replyTo: { email: MAIL_FROM },
-            to: [{ email: toEmail }],
-            subject,
-            textContent: text,
-            htmlContent: html
-          }),
+          body: JSON.stringify(payload),
           signal: controller.signal
         });
 
         clearTimeout(timeout);
 
         const bodyText = await res.text();
-
         if (res.ok) {
-          try {
-            return bodyText ? JSON.parse(bodyText) : {};
-          } catch {
-            return {};
-          }
+          try { return bodyText ? JSON.parse(bodyText) : {}; } catch { return {}; }
         }
 
-        // Retry on HTTP 429 throttling or server-side 5xx errors
         const transientStatus = res.status === 429 || (res.status >= 500 && res.status <= 599);
         if (attempt < maxAttempts && transientStatus) {
           const backoffMs = 600 * attempt + Math.floor(Math.random() * 300);
-          console.warn(`[mail] Brevo ${res.status}, retrying attempt ${attempt + 1} in ${backoffMs}ms`);
-          await new Promise((r) => setTimeout(r, backoffMs));
+          await new Promise(r => setTimeout(r, backoffMs));
           continue;
         }
 
-        console.error('[mail] Brevo send failed', res.status, bodyText);
         throw new Error(`Brevo send failed: ${res.status}`);
       } catch (err) {
         lastErr = err;
-        const transientErr =
-          err && (err.name === 'AbortError' || err.code === 'ECONNRESET' || err.code === 'ETIMEDOUT');
-
+        const transientErr = err && (err.name === 'AbortError' || err.code === 'ECONNRESET' || err.code === 'ETIMEDOUT');
         if (attempt < maxAttempts && transientErr) {
           const backoffMs = 600 * attempt + Math.floor(Math.random() * 300);
-          console.warn(
-            `[mail] Network error (${(err && (err.code || err.name)) || 'unknown'}), retrying attempt ${attempt + 1} in ${backoffMs}ms`
-          );
-          await new Promise((r) => setTimeout(r, backoffMs));
+          await new Promise(r => setTimeout(r, backoffMs));
           continue;
         }
-
-        console.error('[mail] Brevo send error', err);
         throw err;
       }
     }
@@ -214,88 +201,59 @@ function sendBrevoEmail({ toEmail, subject, text, html }) {
   return attemptSend();
 }
 
-// New: Resend fallback helper
+// Optional: keep Resend fallback (only when you verify your own domain there)
 async function sendResendEmail({ toEmail, subject, text, html }) {
-    if (!RESEND_API_KEY || !MAIL_FROM) {
-        throw new Error('RESEND_API_KEY or MAIL_FROM missing');
-    }
-    const url = 'https://api.resend.com/emails';
-    const payload = {
-        from: `${MAIL_FROM_NAME || 'VR Productiox'} <${MAIL_FROM}>`,
-        to: [toEmail],
-        subject,
-        html: html || (text ? text.replace(/\n/g, '<br>') : undefined),
-        text: text
-    };
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 8000);
-    const res = await fetch(url, {
-        method: 'POST',
-        headers: {
-            'Authorization': `Bearer ${RESEND_API_KEY}`,
-            'Content-Type': 'application/json',
-            'Accept': 'application/json',
-            'Connection': 'close'
-        },
-        body: JSON.stringify(payload),
-        signal: controller.signal
-    });
-    clearTimeout(timeout);
-    const bodyText = await res.text();
-    if (!res.ok) {
-        console.error('[mail] Resend send failed', res.status, bodyText);
-        throw new Error(`Resend send failed: ${res.status}`);
-    }
-    try {
-        return bodyText ? JSON.parse(bodyText) : {};
-    } catch {
-        return {};
-    }
+  if (!RESEND_API_KEY || !MAIL_FROM) {
+    throw new Error('RESEND_API_KEY or MAIL_FROM missing');
+  }
+  const url = 'https://api.resend.com/emails';
+  const payload = {
+    from: `${MAIL_FROM_NAME || 'VR Productiox'} <${MAIL_FROM}>`,
+    to: [toEmail],
+    subject,
+    html: html || (text ? text.replace(/\n/g, '<br>') : undefined),
+    text,
+    reply_to: MAIL_REPLY_TO
+  };
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8000);
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${RESEND_API_KEY}`,
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      Connection: 'close'
+    },
+    body: JSON.stringify(payload),
+    signal: controller.signal
+  });
+  clearTimeout(timeout);
+  const bodyText = await res.text();
+  if (!res.ok) throw new Error(`Resend send failed: ${res.status}`);
+  try { return bodyText ? JSON.parse(bodyText) : {}; } catch { return {}; }
 }
 
-// Unified sender with fallback: try Brevo, then Resend
+
+
+// Unified sender: Brevo first, Resend only if Brevo missing/fails
 async function sendEmailDualProvider(opts) {
-    // Try Brevo first if configured
-    if (BREVO_API_KEY) {
-        try {
-            const r = await sendBrevoEmail(opts);
-            console.log('[mail] Sent via Brevo', { to: opts.toEmail, subject: opts.subject });
-            return r;
-        } catch (err) {
-            console.warn('[mail] Brevo failed, falling back to Resend', err && (err.code || err.message || err));
-        }
-    }
-    // Fallback to Resend if available
-    if (RESEND_API_KEY) {
-        const r = await sendResendEmail(opts);
-        console.log('[mail] Sent via Resend', { to: opts.toEmail, subject: opts.subject });
-        return r;
-    }
-    throw new Error('No mail provider configured (BREVO_API_KEY/RESEND_API_KEY missing)');
-}
-
-// Provider-agnostic send with Brevo -> Resend fallback
-async function sendEmail(payload) {
-  const p = payload || {};
+  const p = opts || {};
   if (BREVO_API_KEY && MAIL_FROM) {
     try {
       const data = await sendBrevoEmail(p);
+      console.log('[mail] Sent via Brevo', { to: p.toEmail, subject: p.subject });
       return { provider: 'brevo', data };
-    } catch (e) {
-      if (RESEND_API_KEY && MAIL_FROM) {
-        console.warn('[mail] Falling back to Resend due to Brevo failure:', e && e.message ? e.message : e);
-        const data2 = await sendResendEmail(p);
-        return { provider: 'resend', data: data2 };
-      }
-      throw e;
+    } catch (err) {
+      console.warn('[mail] Brevo failed', err && (err.code || err.message || err));
+      // fall through to Resend if configured
     }
   }
-
   if (RESEND_API_KEY && MAIL_FROM) {
     const data = await sendResendEmail(p);
+    console.log('[mail] Sent via Resend', { to: p.toEmail, subject: p.subject });
     return { provider: 'resend', data };
   }
-
   throw new Error('No mail provider configured');
 }
 
@@ -770,7 +728,7 @@ app.post('/api/upload', requireAdmin, uploadLimiter, async (req, res) => {
   }
 });
 
-// Helper: send email notifications for contact messages (Brevo API only)
+// Send contact emails (admin + visitor) using Brevo or Resend
 async function sendContactEmails(message) {
   if ((!BREVO_API_KEY && !RESEND_API_KEY) || !MAIL_FROM) return;
 
@@ -798,8 +756,6 @@ Thank you for contacting VR_Productiox.
 
 We’ve received your project enquiry and will get back to you within 24–48 hours with more details.
 
-Looking forward to connecting with you.
-
 Best regards,
 Vrutant Ratnapure
 Video Editor & Cinematographer
@@ -807,7 +763,6 @@ VR_Productiox`;
 
   const tasks = [];
 
-  // Send admin notification
   if (adminRecipient) {
     tasks.push(
       sendEmailDualProvider({
@@ -815,13 +770,10 @@ VR_Productiox`;
         subject: `New portfolio enquiry: ${safeSubject}`,
         text: adminText,
         html: adminText.replace(/\n/g, '<br>')
-      }).catch((e) => {
-        console.error('[mail] Failed to send admin contact email', e);
-      })
+      }).catch(e => console.error('[mail] Failed admin email', e))
     );
   }
 
-  // Send visitor confirmation
   if (message.email) {
     tasks.push(
       sendEmailDualProvider({
@@ -829,9 +781,7 @@ VR_Productiox`;
         subject: 'Thank you for contacting VR_Productiox',
         text: userBody,
         html: userBody.replace(/\n/g, '<br>')
-      }).catch((e) => {
-        console.error('[mail] Failed to send confirmation email to visitor', e);
-      })
+      }).catch(e => console.error('[mail] Failed visitor email', e))
     );
   }
 

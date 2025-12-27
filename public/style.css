@@ -347,7 +347,11 @@ body::after {
     font-weight: 700;
     line-height: 1.1;
     margin-bottom: 1.5rem;
-    color: #ffffff;
+    background-image: linear-gradient(90deg, #ffffff 0%, #e5e7eb 50%, #ffffff 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    animation: heroShine 4s ease-in-out infinite;
 }
 
 .hero-description {
@@ -455,9 +459,9 @@ body::after {
 }
 
  .hero-video-placeholder {
-    /* make the hero image card taller and clear */
-    width: min(640px, 92vw);
-    height: clamp(360px, 52vw, 720px);
+    /* make the hero image card more compact */
+    width: min(560px, 92vw);
+    height: clamp(260px, 40vw, 520px);
     /* Updated hero image */
     background: #050505 url('Instagram post - 21.jpg.png') center/cover no-repeat;
     border-radius: 18px;
@@ -1175,8 +1179,9 @@ body::after {
         line-height: 1.15;
     }
     .hero-video-placeholder {
-        width: min(460px, 94vw);
-        height: clamp(340px, 64vw, 620px);
+        width: min(420px, 94vw);
+        height: clamp(240px, 58vw, 460px);
+        max-width: 420px;
     }
 }
 
@@ -2806,6 +2811,20 @@ body::after {
     }
     50% {
         opacity: 0.5;
+    }
+}
+
+@keyframes heroShine {
+    0% { background-position: -200% 0; }
+    50% { background-position: 0% 0; }
+    100% { background-position: 200% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .hero-title {
+        animation: none;
+        color: #ffffff;
+        background: none;
     }
 }
 
