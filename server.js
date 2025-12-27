@@ -61,6 +61,53 @@ if (SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY) {
   console.warn('[storage] SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY not set; using local uploads/ folder');
 }
 
+// Helper: Client Reviews persistence in Supabase
+async function getClientReviewsFromDB() {
+  if (!supabase) return [];
+  const { data, error } = await supabase
+    .from('client_reviews')
+    .select('title, platform, post_url, comment_text, comment_author, thumbnail, created_at')
+    .order('created_at', { ascending: true });
+  if (error) {
+    console.error('[reviews] getClientReviewsFromDB failed:', error);
+    return [];
+  }
+  return (data || []).map(r => ({
+    title: r.title || '',
+    platform: r.platform || '',
+    postUrl: r.post_url || '',
+    commentText: r.comment_text || '',
+    commentAuthor: r.comment_author || '',
+    thumbnail: r.thumbnail || ''
+  }));
+}
+
+async function syncClientHighlightsToDB(items) {
+  if (!supabase || !Array.isArray(items)) return;
+  // Replace all rows with current items to keep it simple and deterministic
+  const { error: delError } = await supabase
+    .from('client_reviews')
+    .delete()
+    .gte('id', 0); // delete all rows safely (ids are positive identity)
+  if (delError) {
+    console.error('[reviews] Failed to clear client_reviews table:', delError);
+    return;
+  }
+  if (!items.length) return;
+  const rows = items.map(it => ({
+    title: it.title || '',
+    platform: it.platform || '',
+    post_url: it.postUrl || '',
+    comment_text: it.commentText || '',
+    comment_author: it.commentAuthor || '',
+    thumbnail: it.thumbnail || ''
+  }));
+  const { error: insError } = await supabase.from('client_reviews').insert(rows);
+  if (insError) {
+    console.error('[reviews] Failed to insert client_reviews:', insError);
+  }
+}
+
 // Brevo Email via HTTP API (contact-form email notifications)
 const MAIL_FROM = String(process.env.MAIL_FROM || '').trim().replace(/^["']|["']$/g, '');
 const MAIL_FROM_NAME = String(process.env.MAIL_FROM_NAME || '').trim();
@@ -483,6 +530,17 @@ app.post('/api/admin/password', requireAdmin, async (req, res) => {
 app.get('/portfolio_data.json', async (req, res) => {
   try {
     const data = await db.getPortfolio();
+
+    // Merge DB-backed client reviews if available
+    try {
+      const reviews = await getClientReviewsFromDB();
+      if (Array.isArray(reviews) && reviews.length) {
+        data.clientHighlights = reviews;
+      }
+    } catch (e) {
+      console.warn('[reviews] Skipping DB reviews merge due to error:', e);
+    }
+
     res.json(data);
   } catch (e) {
     console.error('Failed to get portfolio', e);
@@ -497,6 +555,13 @@ app.put('/api/portfolio', requireAdmin, async (req, res) => {
 
   try {
     await db.setPortfolio(parsed.data);
+
+    // Persist client reviews to DB to avoid data loss
+    const highlights = Array.isArray(parsed.data.clientHighlights) ? parsed.data.clientHighlights : [];
+    syncClientHighlightsToDB(highlights).catch((e) => {
+      console.error('[reviews] Sync clientHighlights to DB failed:', e);
+    });
+
     res.json({ success: true });
   } catch (e) {
     console.error('Failed to save portfolio', e);
