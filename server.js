@@ -3,6 +3,8 @@ const fs = require('fs');
 const path = require('path');
 const PDFDocument = require('pdfkit');
 
+const dns = require('dns');
+
 const compression = require('compression');
 const morgan = require('morgan');
 const bcrypt = require('bcryptjs');
@@ -15,6 +17,9 @@ const { createClient } = require('@supabase/supabase-js');
 const db = require('./db_supabase');
 
 require('dotenv').config();
+
+// Prefer IPv4 on Vercel to avoid TLS handshake resets
+dns.setDefaultResultOrder('ipv4first');
 
 const app = express();
 app.disable('x-powered-by');
@@ -126,19 +131,11 @@ function sendBrevoEmail({ toEmail, subject, text, html }) {
     return Promise.reject(new Error('BREVO_API_KEY or MAIL_FROM missing'));
   }
 
-  const payload = {
-    sender: { name: MAIL_FROM_NAME || 'VR Productiox', email: MAIL_FROM },
-    replyTo: { email: MAIL_FROM },
-    to: [{ email: toEmail }],
-    subject,
-    textContent: text,
-    htmlContent: html
-  };
-
   const url = 'https://api.brevo.com/v3/smtp/email';
   const headers = {
     'api-key': BREVO_API_KEY,
-    'Content-Type': 'application/json'
+    'Content-Type': 'application/json',
+    'Accept': 'application/json'
   };
 
   const maxAttempts = 3;
@@ -153,30 +150,50 @@ function sendBrevoEmail({ toEmail, subject, text, html }) {
         const res = await fetch(url, {
           method: 'POST',
           headers,
-          body: JSON.stringify(payload),
+          body: JSON.stringify({
+            sender: { name: MAIL_FROM_NAME || 'VR Productiox', email: MAIL_FROM },
+            replyTo: { email: MAIL_FROM },
+            to: [{ email: toEmail }],
+            subject,
+            textContent: text,
+            htmlContent: html
+          }),
           signal: controller.signal
         });
 
         clearTimeout(timeout);
 
         const bodyText = await res.text();
+
         if (res.ok) {
           try {
             return bodyText ? JSON.parse(bodyText) : {};
           } catch {
             return {};
           }
-        } else {
-          console.error('[mail] Brevo send failed', res.status, bodyText);
-          throw new Error(`Brevo send failed: ${res.status}`);
         }
+
+        // Retry on HTTP 429 throttling or server-side 5xx errors
+        const transientStatus = res.status === 429 || (res.status >= 500 && res.status <= 599);
+        if (attempt < maxAttempts && transientStatus) {
+          const backoffMs = 600 * attempt + Math.floor(Math.random() * 300);
+          console.warn(`[mail] Brevo ${res.status}, retrying attempt ${attempt + 1} in ${backoffMs}ms`);
+          await new Promise((r) => setTimeout(r, backoffMs));
+          continue;
+        }
+
+        console.error('[mail] Brevo send failed', res.status, bodyText);
+        throw new Error(`Brevo send failed: ${res.status}`);
       } catch (err) {
         lastErr = err;
-        const transient =
+        const transientErr =
           err && (err.name === 'AbortError' || err.code === 'ECONNRESET' || err.code === 'ETIMEDOUT');
 
-        if (attempt < maxAttempts && transient) {
-          const backoffMs = 500 * attempt;
+        if (attempt < maxAttempts && transientErr) {
+          const backoffMs = 600 * attempt + Math.floor(Math.random() * 300);
+          console.warn(
+            `[mail] Network error (${(err && (err.code || err.name)) || 'unknown'}), retrying attempt ${attempt + 1} in ${backoffMs}ms`
+          );
           await new Promise((r) => setTimeout(r, backoffMs));
           continue;
         }
