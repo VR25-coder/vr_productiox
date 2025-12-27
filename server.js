@@ -404,7 +404,7 @@ function hasProhibitedLanguage(text) {
   const value = String(text).toLowerCase();
   const banned = [
     'fuck', 'f***', 'shit', 'bitch', 'bastard', 'slut', 'whore',
-    'nigger', 'chutiya', 'madarchod', 'bhenchod', 'gaand', 'harami'
+    'nigger', 'chutiya', 'madarchod', 'bhenchod', 'gaand', 'harami', 'BSDK', 'BC', 'Nudes', 'bsdk', 'bc', 'mkc', 'land ke', 'bad'
   ];
   return banned.some(word => value.includes(word));
 }

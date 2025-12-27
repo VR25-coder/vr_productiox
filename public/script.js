@@ -1036,12 +1036,20 @@ async function loadPortfolioContentFromJSON() {
                     wrapper.classList.remove('availability-status--available', 'availability-status--unavailable');
                     dot.classList.remove('status-dot--available', 'status-dot--unavailable');
 
-                    const label = String(data.personal.availability || '').trim().toLowerCase();
+                    const rawLabel = String(data.personal.availability || '');
+                    const normalized = rawLabel.replace(/\s+/g, ' ').trim().toLowerCase();
+
                     const isUnavailable =
-                        label === 'not available for projects' ||
-                        label === 'not available' ||
-                        label === 'unavailable' ||
-                        label === 'off';
+                        normalized === 'not available for projects' ||
+                        normalized === 'not available' ||
+                        normalized === 'unavailable for projects' ||
+                        normalized === 'unavailable' ||
+                        normalized === 'un available for projects' ||
+                        normalized === 'un available' ||
+                        normalized.includes('not available') ||
+                        normalized.includes('unavailable') ||
+                        normalized.includes('un available') ||
+                        normalized === 'off';
 
                     if (isUnavailable) {
                         wrapper.classList.add('availability-status--unavailable');

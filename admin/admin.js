@@ -624,34 +624,16 @@
 
     renderRecognitionList();
 
-    const testimonialsInitial = (data.testimonials || []).map(t => `${t.quote || ''} | ${t.author || ''}`).join('\\n');
-    fieldRow('testimonialsText', 'Testimonials (quote | author per line)',
-      testimonialsInitial.replace(/\\n/g, '\n'),
-      true
-    );
-
-    // Client highlights: title | comment | comment author | platform | post URL | thumbnail per line
-    const clientHighlightsInitial = (data.clientHighlights || []).map(ch =>
-      [
-        ch.title || '',
-        ch.commentText || ch.quote || '',
-        ch.commentAuthor || ch.author || '',
-        ch.platform || '',
-        ch.postUrl || '',
-        ch.thumbnail || ''
-      ].join(' | ')
-    ).join('\n');
-    fieldRow('clientHighlightsText', 'Client highlights (title | comment | comment author | platform | post URL | thumbnail per line)',
-      clientHighlightsInitial.replace(/\\n/g, '\n'),
-      true
-    );
-
     // Services row (icon | title | description | type(link/video) | linkOrFile per line)
-    const servicesRowInitial = (data.servicesRow || [])
-      .map(s => `${s.icon || ''} | ${s.title || ''} | ${s.description || ''} | ${s.type || ''} | ${s.link || s.videoFile || ''}`)
-      .join('\n');
-    fieldRow('servicesRowText', 'Services row (icon | title | description | type | link-or-file per line)',
-      servicesRowInitial.replace(/\\n/g, '\n'),
+    const servicesRowInitial = (data.servicesRow || []).map(s => [
+      s.icon || '',
+      s.title || '',
+      s.description || '',
+      s.type || 'link',
+      s.type === 'video' ? (s.videoFile || '') : (s.link || '')
+    ].join(' | ')).join('\n');
+    fieldRow('servicesRowText', 'Services row (icon | title | description | type(link/video) | linkOrFile per line)',
+      servicesRowInitial.replace(/\n/g, '\n'),
       true
     );
 
@@ -959,7 +941,7 @@
     // Recognition (icon | title | event per line)
     const recEl = portfolioFormEl.querySelector('[data-key="recognitionText"]');
     if (recEl) {
-      const items = recEl.value.split('\\n').map(s => s.trim()).filter(Boolean).map(line => {
+      const items = recEl.value.split('\n').map(s => s.trim()).filter(Boolean).map(line => {
         const parts = line.split('|').map(p => p.trim());
         return {
           icon: parts[0] || '',
@@ -970,31 +952,6 @@
         };
       });
       clone.recognition = items;
-    }
-    // Testimonials (quote | author per line)
-    const testEl = portfolioFormEl.querySelector('[data-key="testimonialsText"]');
-    if (testEl) {
-      const items = testEl.value.split('\\n').map(s => s.trim()).filter(Boolean).map(line => {
-        const parts = line.split('|').map(p => p.trim());
-        return { quote: parts[0] || '', author: parts[1] || '' };
-      });
-      clone.testimonials = items;
-    }
-    // Client highlights (title | comment | comment author | platform | post URL | thumbnail per line)
-    const chEl = portfolioFormEl.querySelector('[data-key="clientHighlightsText"]');
-    if (chEl) {
-      const items = chEl.value.split('\\n').map(s => s.trim()).filter(Boolean).map(line => {
-        const parts = line.split('|').map(p => p.trim());
-        return {
-          title: parts[0] || '',
-          commentText: parts[1] || '',
-          commentAuthor: parts[2] || '',
-          platform: parts[3] || '',
-          postUrl: parts[4] || '',
-          thumbnail: parts[5] || ''
-        };
-      });
-      clone.clientHighlights = items;
     }
 
     // Services row (icon | title | description | type | link-or-file per line)
