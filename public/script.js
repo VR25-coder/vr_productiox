@@ -1206,9 +1206,10 @@ async function loadPortfolioContentFromJSON() {
                     const item = document.createElement('div');
                     item.className = 'skill-bar-item';
 
-                    const name = document.createElement('span');
+                    const name = document.createElement('div');
                     name.className = 'skill-name';
                     name.textContent = `${skill.name || ''} — ${skill.percentage || 0}%`;
+                    item.appendChild(name);
 
                     const bar = document.createElement('div');
                     bar.className = 'skill-bar';
@@ -1217,8 +1218,15 @@ async function loadPortfolioContentFromJSON() {
                     progress.className = 'skill-progress';
                     progress.setAttribute('data-progress', String(skill.percentage || 0));
 
+                    // Color specific top skills
+                    const lowerName = String(skill.name || '').toLowerCase();
+                    if (lowerName.includes('commercial editing')) {
+                        progress.style.background = '#ff8c00'; // orange
+                    } else if (lowerName.includes('documentary')) {
+                        progress.style.background = '#6a5acd'; // slate blue/purple
+                    }
+
                     bar.appendChild(progress);
-                    item.appendChild(name);
                     item.appendChild(bar);
                     topSkillsContainer.appendChild(item);
                 });

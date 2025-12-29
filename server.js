@@ -484,7 +484,11 @@ const messagePatchSchema = z
   .strict();
 
 const invoiceServiceSchema = z.object({
-  name: z.string().trim().min(1).max(120),
+  // Accept missing or empty name and default to "Service" after trimming
+  name: z.preprocess((val) => {
+    const s = typeof val === 'string' ? val.trim() : '';
+    return s.length ? s : undefined;
+  }, z.string().min(1).max(120).default('Service')),
   description: z.string().trim().max(800).optional().default(''),
   quantity: z.number().nonnegative().optional().default(0),
   rate: z.number().nonnegative().optional().default(0),
@@ -1218,15 +1222,19 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: 'Internal server error' });
 });
 
-const server = app.listen(PORT, () => {
-  console.log(`Server listening on http://localhost:${PORT}`);
-});
+if (process.env.VERCEL) {
+  module.exports = app;
+} else {
+  const server = app.listen(PORT, () => {
+    console.log(`Server listening on http://localhost:${PORT}`);
+  });
 
-server.on('error', (err) => {
-  if (err && err.code === 'EADDRINUSE') {
-    console.error(`\n[error] Port ${PORT} is already in use.`);
-    console.error('Close the other process using this port, or set PORT in .env (e.g. PORT=3001).\n');
-    process.exit(1);
-  }
-  throw err;
-});
+  server.on('error', (err) => {
+    if (err && err.code === 'EADDRINUSE') {
+      console.error(`\n[error] Port ${PORT} is already in use.`);
+      console.error('Close the other process using this port, or set PORT in .env (e.g. PORT=3001).\n');
+      process.exit(1);
+    }
+    throw err;
+  });
+}

@@ -9,7 +9,7 @@
     "check": "node --check server.js"
   },
   "engines": {
-    "node": "24.x"
+    "node": ">=20"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.48.0",

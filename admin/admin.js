@@ -93,8 +93,7 @@
       reviews: document.getElementById('tab-reviews'),
       billing: document.getElementById('tab-billing'),
       tasks: document.getElementById('tab-tasks'),
-      ai: document.getElementById('tab-ai'),
-      learning: document.getElementById('tab-learning'),
+      recognition: document.getElementById('tab-recognition'),
       security: document.getElementById('tab-security')
     };
     buttons.forEach(btn => {
@@ -107,6 +106,7 @@
         if (panel) panel.classList.add('active');
         if (tab === 'messages') loadMessages();
         if (tab === 'reviews') initReviewsTab();
+        if (tab === 'recognition') initRecognitionTab();
         if (tab === 'billing') loadInvoices();
         if (tab === 'tasks') renderTasks();
         if (tab === 'security') initSecurityTab();
@@ -435,194 +435,90 @@
       : '';
     fieldRow('careerText', 'Career Journey (one entry per line)', careerInitial, true);
     fieldRow('techStackText', 'Tech Stack (one tool per line)', (data.techStack || []).join('\n'), true);
-    fieldRow('recognitionText', 'Latest Recognition (icon | title | event | image-url | link per line)',
-      (data.recognition || []).map(r => `${r.icon || ''} | ${r.title || ''} | ${r.event || ''} | ${r.imageUrl || ''} | ${r.link || ''}`).join('\\n'),
-      true
-    );
 
-    // Visual Latest Recognition editor (per-item rows + image upload)
-    const recTextEl = portfolioFormEl.querySelector('[data-key="recognitionText"]');
-    let recognitionItems = Array.isArray(data.recognition)
-      ? data.recognition.map(r => ({
-          icon: r.icon || '',
-          title: r.title || '',
-          event: r.event || '',
-          imageUrl: r.imageUrl || '',
-          link: r.link || ''
-        }))
-      : [];
-
-    // If no structured array but raw text exists, parse it once so editor has something to show
-    if (!recognitionItems.length && recTextEl && recTextEl.value && recTextEl.value.trim()) {
-      try {
-        const lines = recTextEl.value.split('\\n').map(s => s.trim()).filter(Boolean);
-        recognitionItems = lines.map(line => {
-          const parts = line.split('|').map(p => p.trim());
-          return {
-            icon: parts[0] || '',
-            title: parts[1] || '',
-            event: parts[2] || '',
-            imageUrl: parts[3] || '',
-            link: parts[4] || ''
-          };
-        });
-      } catch {
-        // ignore parse errors; stay on empty list
-      }
+    // Technical Expertise (skills: name + percentage) — new visual editor
+    if (!Array.isArray(livePortfolio.skills)) {
+      livePortfolio.skills = Array.isArray(data.skills) ? data.skills : [];
     }
 
-    // Keep live portfolio in sync with the editor
-    if (!livePortfolio || typeof livePortfolio !== 'object') livePortfolio = {};
-    livePortfolio.recognition = recognitionItems.map(r => ({ ...r }));
-
-    const recognitionWrapper = document.createElement('div');
-    recognitionWrapper.className = 'field-group';
-    recognitionWrapper.innerHTML = `
-      <label>Latest Recognition (visual editor)</label>
+    const skillsWrapper = document.createElement('div');
+    skillsWrapper.className = 'field-group';
+    skillsWrapper.innerHTML = `
+      <label>Technical Expertise</label>
       <p style="font-size:0.8rem;color:#aaa;margin-bottom:0.5rem;">
-        Manage your awards as individual cards. Each row controls icon, title, event, optional image and link.
-        The underlying text field above is kept in sync automatically when you edit here.
+        Add your core skills with proficiency. Each row is a skill name and percentage.
       </p>
-      <div id="recognition-editor-list" class="list" style="margin-top:0.5rem;"></div>
-      <button type="button" id="recognition-add-btn" class="btn-secondary-admin" style="margin-top:0.75rem;">+ Add recognition</button>
+      <div id="skills-editor-list" class="list" style="margin-top:0.5rem;"></div>
+      <button type="button" id="skills-add-btn" class="btn-secondary-admin" style="margin-top:0.75rem;">+ Add skill</button>
     `;
-    portfolioFormEl.appendChild(recognitionWrapper);
+    portfolioFormEl.appendChild(skillsWrapper);
 
-    const recognitionListEl = recognitionWrapper.querySelector('#recognition-editor-list');
-    const recognitionAddBtn = recognitionWrapper.querySelector('#recognition-add-btn');
+    const skillsListEl = skillsWrapper.querySelector('#skills-editor-list');
+    const addSkillBtn = skillsWrapper.querySelector('#skills-add-btn');
 
-    function syncRecognitionTextFromEditor() {
-      if (!recTextEl) return;
-      const lines = recognitionItems.map(r => [
-        r.icon || '',
-        r.title || '',
-        r.event || '',
-        r.imageUrl || '',
-        r.link || ''
-      ].join(' | '));
-      recTextEl.value = lines.join('\\n');
-      // Also keep structured array up-to-date so previews and saves use the same data
-      livePortfolio.recognition = recognitionItems.map(r => ({ ...r }));
-      recTextEl.dispatchEvent(new Event('input', { bubbles: true }));
-    }
+    function renderSkillsList() {
+      if (!skillsListEl) return;
+      skillsListEl.innerHTML = '';
 
-    function renderRecognitionList() {
-      if (!recognitionListEl) return;
-      recognitionListEl.innerHTML = '';
-
-      if (!recognitionItems.length) {
+      const items = livePortfolio.skills || [];
+      if (!items.length) {
         const empty = document.createElement('p');
         empty.style.color = '#9ca3af';
         empty.style.fontSize = '0.85rem';
-        empty.textContent = 'No recognition items yet. Click "+ Add recognition" to create your first award.';
-        recognitionListEl.appendChild(empty);
+        empty.textContent = 'No skills yet. Click "+ Add skill" to create your first entry.';
+        skillsListEl.appendChild(empty);
         return;
       }
 
-      recognitionItems.forEach((rec, index) => {
+      items.forEach((skill, index) => {
         const row = document.createElement('div');
         row.className = 'list-item';
-        row.setAttribute('data-recognition-index', String(index));
-
+        row.setAttribute('data-skill-index', String(index));
         row.innerHTML = `
           <div class="list-item-main">
             <div style="display:flex;flex-wrap:wrap;gap:0.5rem;align-items:flex-start;">
-              <input data-field="icon" placeholder="Icon (emoji)" value="${rec.icon || ''}"
-                     style="flex:0.4 1 70px;padding:0.4rem 0.6rem;border-radius:6px;border:1px solid #333;background:#000;color:#fff;font-size:0.85rem;" />
-              <input data-field="title" placeholder="Title" value="${rec.title || ''}"
-                     style="flex:1 1 160px;padding:0.4rem 0.6rem;border-radius:6px;border:1px solid #333;background:#000;color:#fff;font-size:0.85rem;" />
-              <input data-field="event" placeholder="Event / Year" value="${rec.event || ''}"
-                     style="flex:1 1 140px;padding:0.4rem 0.6rem;border-radius:6px;border:1px solid #333;background:#000;color:#fff;font-size:0.8rem;" />
-            </div>
-            <div style="margin-top:0.4rem;display:flex;flex-direction:column;gap:0.4rem;">
-              <input data-field="link" placeholder="External link (optional)" value="${rec.link || ''}"
-                     style="width:100%;padding:0.4rem 0.6rem;border-radius:6px;border:1px solid #333;background:#000;color:#fff;font-size:0.8rem;" />
-              <div style="display:flex;flex-wrap:wrap;gap:0.5rem;align-items:center;">
-                <input data-field="imageUrl" placeholder="Image URL (optional)" value="${rec.imageUrl || ''}"
-                       style="flex:1 1 160px;padding:0.4rem 0.6rem;border-radius:6px;border:1px solid #333;background:#000;color:#fff;font-size:0.8rem;" />
-                <button type="button" data-action="upload-image"
-                        style="padding:0.35rem 0.6rem;border-radius:6px;border:none;background:#3b82f6;color:#fff;font-size:0.75rem;cursor:pointer;">Upload image</button>
-                <input type="file" data-upload="image" accept="image/*" style="display:none" />
-                <img data-preview="image" src="${rec.imageUrl || ''}"
-                     style="width:48px;height:48px;object-fit:cover;border-radius:8px;border:1px solid #333;${rec.imageUrl ? '' : 'display:none;'}" />
-              </div>
+              <input data-field="name" placeholder="Skill name" value="${skill.name || ''}"
+                     style="flex:1 1 180px;padding:0.4rem 0.6rem;border-radius:6px;border:1px solid #333;background:#000;color:#fff;font-size:0.85rem;" />
+              <input data-field="percentage" placeholder="Percentage" type="number" min="0" max="100" step="1" value="${typeof skill.percentage === 'number' ? skill.percentage : ''}"
+                     style="flex:0.4 1 120px;padding:0.4rem 0.6rem;border-radius:6px;border:1px solid #333;background:#000;color:#fff;font-size:0.85rem;" />
             </div>
           </div>
           <div class="list-item-actions">
-            <button type="button" data-action="remove-recognition"
+            <button type="button" data-action="remove-skill"
                     style="padding:0.3rem 0.6rem;border-radius:6px;border:none;background:#ef4444;color:#fff;font-size:0.75rem;cursor:pointer;">Delete</button>
           </div>
         `;
 
-        // Text fields
         row.querySelectorAll('[data-field]').forEach(input => {
           const field = input.getAttribute('data-field');
-          const handler = () => {
-            const target = recognitionItems[index] || (recognitionItems[index] = {});
-            target[field] = input.value;
-            syncRecognitionTextFromEditor();
-          };
-          input.addEventListener('input', handler);
+          input.addEventListener('input', () => {
+            const target = livePortfolio.skills[index] || (livePortfolio.skills[index] = {});
+            target[field] = field === 'percentage' ? Number(input.value || '0') || 0 : input.value;
+          });
         });
 
-        // Image upload
-        const uploadBtn = row.querySelector('[data-action="upload-image"]');
-        const fileInput = row.querySelector('[data-upload="image"]');
-        const previewImg = row.querySelector('[data-preview="image"]');
-        const imageField = row.querySelector('[data-field="imageUrl"]');
-
-        if (uploadBtn && fileInput && imageField) {
-          uploadBtn.addEventListener('click', () => fileInput.click());
-          fileInput.addEventListener('change', () => {
-            const file = fileInput.files && fileInput.files[0];
-            if (!file) return;
-            uploadBtn.disabled = true;
-            uploadFileToServer(file, 'images')
-              .then(info => {
-                const url = (info && (info.url || info.fileName)) || '';
-                if (!url) return;
-                imageField.value = url;
-                if (previewImg) {
-                  previewImg.src = url;
-                  previewImg.style.display = 'block';
-                }
-                const target = recognitionItems[index] || (recognitionItems[index] = {});
-                target.imageUrl = url;
-                syncRecognitionTextFromEditor();
-              })
-              .catch(() => {
-                alert('Failed to upload recognition image.');
-              })
-              .finally(() => {
-                uploadBtn.disabled = false;
-                fileInput.value = '';
-              });
-          });
-        }
-
-        const removeBtn = row.querySelector('[data-action="remove-recognition"]');
+        const removeBtn = row.querySelector('[data-action="remove-skill"]');
         if (removeBtn) {
           removeBtn.addEventListener('click', () => {
-            recognitionItems.splice(index, 1);
-            renderRecognitionList();
-            syncRecognitionTextFromEditor();
+            livePortfolio.skills.splice(index, 1);
+            renderSkillsList();
           });
         }
 
-        recognitionListEl.appendChild(row);
+        skillsListEl.appendChild(row);
       });
     }
 
-    if (recognitionAddBtn && !recognitionAddBtn.__bound) {
-      recognitionAddBtn.__bound = true;
-      recognitionAddBtn.addEventListener('click', () => {
-        recognitionItems.push({ icon: '🏆', title: '', event: '', imageUrl: '', link: '' });
-        renderRecognitionList();
-        syncRecognitionTextFromEditor();
+    if (addSkillBtn && !addSkillBtn.__bound) {
+      addSkillBtn.__bound = true;
+      addSkillBtn.addEventListener('click', () => {
+        if (!Array.isArray(livePortfolio.skills)) livePortfolio.skills = [];
+        livePortfolio.skills.push({ name: '', percentage: 0 });
+        renderSkillsList();
       });
     }
 
-    renderRecognitionList();
+    renderSkillsList();
 
     // Services row (icon | title | description | type(link/video) | linkOrFile per line)
     const servicesRowInitial = (data.servicesRow || []).map(s => [
@@ -938,20 +834,11 @@
       const tools = techEl.value.split('\n').map(s => s.trim()).filter(Boolean);
       clone.techStack = tools;
     }
-    // Recognition (icon | title | event per line)
-    const recEl = portfolioFormEl.querySelector('[data-key="recognitionText"]');
-    if (recEl) {
-      const items = recEl.value.split('\n').map(s => s.trim()).filter(Boolean).map(line => {
-        const parts = line.split('|').map(p => p.trim());
-        return {
-          icon: parts[0] || '',
-          title: parts[1] || '',
-          event: parts[2] || '',
-          imageUrl: parts[3] || '',
-          link: parts[4] || ''
-        };
-      });
-      clone.recognition = items;
+
+    // Recognition parsing removed: use dedicated Recognition tab data (livePortfolio.recognition)
+    // Do not override recognition from the Portfolio tab.
+    if (Array.isArray(livePortfolio.recognition)) {
+      clone.recognition = livePortfolio.recognition.map(r => ({ ...r }));
     }
 
     // Services row (icon | title | description | type | link-or-file per line)
@@ -959,13 +846,16 @@
     if (svcEl) {
       const items = svcEl.value.split('\n').map(s => s.trim()).filter(Boolean).map(line => {
         const parts = line.split('|').map(p => p.trim());
-        const type = parts[3] || 'link';
-        const linkOrFile = parts[4] || '';
-        const base = { icon: parts[0] || '', title: parts[1] || '', description: parts[2] || '', type };
-        if (type === 'video') {
-          return { ...base, videoFile: linkOrFile };
-        }
-        return { ...base, link: linkOrFile };
+        const type = (parts[3] || 'link').toLowerCase() === 'video' ? 'video' : 'link';
+        const obj = {
+          icon: parts[0] || '',
+          title: parts[1] || '',
+          description: parts[2] || '',
+          type
+        };
+        if (type === 'video') obj.videoFile = parts[4] || '';
+        else obj.link = parts[4] || '';
+        return obj;
       });
       clone.servicesRow = items;
     }
@@ -1179,8 +1069,248 @@
   }
 
   // Invoices
-  const invoiceFormEl = document.getElementById('invoice-form');
-  const invoicesListEl = document.getElementById('invoices-list');
+  function loadInvoices() {
+    const formEl = document.getElementById('invoice-form');
+    const listEl = document.getElementById('invoices-list');
+    const createBtn = document.getElementById('create-invoice');
+    if (!formEl || !listEl || !createBtn) return;
+
+    formEl.innerHTML = `
+      <div class="field-group"><label>Client / Company Name</label><input id="inv-client-name" type="text" placeholder="Client or company name" /></div>
+      <div class="field-group"><label>Client Address</label><input id="inv-client-address" type="text" placeholder="Street, area" /></div>
+      <div class="field-group"><label>City / Country / PIN</label><input id="inv-client-city" type="text" placeholder="City / Country / PIN" /></div>
+
+      <div class="field-group"><label>Invoice Date</label><input id="inv-invoice-date" type="date" /></div>
+      <div class="field-group"><label>Due Date</label><input id="inv-due-date" type="date" /></div>
+      <div class="field-group"><label>Reference (INV-XXX)</label><input id="inv-reference" type="text" placeholder="INV-001" /></div>
+      <div class="field-group"><label>Currency (e.g. USD, INR, EUR)</label><input id="inv-currency" type="text" placeholder="USD" /></div>
+
+      <div class="field-group"><label>Website</label><input id="inv-footer-website" type="url" placeholder="https://yourwebsite.com" /></div>
+      <div class="field-group"><label>Phone</label><input id="inv-footer-phone" type="text" placeholder="+91 00000 00000" /></div>
+      <div class="field-group"><label>Email</label><input id="inv-footer-email" type="email" placeholder="hello@example.com" /></div>
+
+      <div class="field-group">
+        <label>Line Items</label>
+        <p style="font-size:0.85rem;color:#999;">Each row becomes one line in the invoice (Item, Qty, Rate, Line Total).</p>
+        <div id="inv-items" class="list" style="display:flex;flex-direction:column;gap:8px;"></div>
+        <button id="inv-add-item" type="button" class="btn-secondary-admin" style="margin-top:6px;">+ Add item</button>
+      </div>
+
+      <div class="field-group" style="display:grid; grid-template-columns: 1.5fr 1fr; gap:12px;">
+        <div>
+          <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px;">
+            <div><label>Subtotal</label><input id="inv-subtotal" type="number" step="0.01" readonly /></div>
+            <div><label>Tax (%)</label><input id="inv-tax-percent" type="number" step="0.01" value="10" /></div>
+            <div><label>Tax Amount</label><input id="inv-tax-amount" type="number" step="0.01" readonly /></div>
+            <div><label>Total Due</label><input id="inv-total" type="number" step="0.01" readonly /></div>
+          </div>
+        </div>
+        <div>
+          <label>Payment terms</label>
+          <textarea id="inv-terms" rows="2" placeholder="Please pay within 15 days of receiving this invoice."></textarea>
+          <label style="margin-top:8px;">Refund policy</label>
+          <textarea id="inv-refund" rows="3" placeholder="Refunds are handled on a case-by-case basis and are not guaranteed once work has started."></textarea>
+        </div>
+      </div>
+    `;
+
+    const itemsEl = document.getElementById('inv-items');
+    const addItemBtn = document.getElementById('inv-add-item');
+    const subtotalEl = document.getElementById('inv-subtotal');
+    const taxPercentEl = document.getElementById('inv-tax-percent');
+    const taxAmountEl = document.getElementById('inv-tax-amount');
+    const totalEl = document.getElementById('inv-total');
+
+    function addItemRow(init = { name: '', quantity: 1, rate: 0, description: '' }) {
+      const row = document.createElement('div');
+      row.dataset.itemRow = 'true'; // mark as a line-item row
+      row.style = 'display:grid; grid-template-columns: 2fr 0.8fr 0.8fr 1fr auto; gap:8px; align-items:center;';
+      const name = document.createElement('input'); name.type = 'text'; name.placeholder = 'Service name'; name.value = init.name;
+      const qty = document.createElement('input'); qty.type = 'number'; qty.min = '0'; qty.placeholder = 'Qty'; qty.value = String(init.quantity);
+      const rate = document.createElement('input'); rate.type = 'number'; rate.min = '0'; rate.placeholder = 'Rate'; rate.value = String(init.rate);
+      const amount = document.createElement('input'); amount.type = 'number'; amount.step = '0.01'; amount.placeholder = 'Amount'; amount.readOnly = true;
+      const del = document.createElement('button'); del.type = 'button'; del.className = 'btn-secondary-admin'; del.textContent = 'Delete';
+
+      const desc = document.createElement('textarea');
+      desc.dataset.itemDesc = 'true'; // mark the description paired with row
+      desc.rows = 2; desc.placeholder = 'Description'; desc.value = init.description;
+      desc.style = 'grid-column: 1 / -2; margin-top:6px;';
+
+      const computeAmount = () => {
+        const a = (Number(qty.value || 0) * Number(rate.value || 0));
+        amount.value = a.toFixed(2);
+        recomputeTotals();
+      };
+      qty.addEventListener('input', computeAmount);
+      rate.addEventListener('input', computeAmount);
+      name.addEventListener('input', recomputeTotals);
+      desc.addEventListener('input', recomputeTotals);
+
+      del.addEventListener('click', () => { row.remove(); desc.remove(); recomputeTotals(); });
+
+      computeAmount();
+      row.appendChild(name); row.appendChild(qty); row.appendChild(rate); row.appendChild(amount); row.appendChild(del);
+      itemsEl.appendChild(row);
+      itemsEl.appendChild(desc);
+    }
+
+    function recomputeTotals() {
+      const rows = itemsEl.querySelectorAll('[data-item-row="true"]');
+      const amounts = Array.from(rows).map(r => {
+        const inputs = r.querySelectorAll('input');
+        const qty = Number(inputs[1]?.value || 0);
+        const rate = Number(inputs[2]?.value || 0);
+        return qty * rate;
+      });
+      const subtotal = amounts.reduce((s, v) => s + v, 0);
+      const taxPercent = Number(taxPercentEl.value || 0);
+      const taxAmount = (subtotal * taxPercent) / 100;
+      const total = subtotal + taxAmount;
+
+      subtotalEl.value = subtotal.toFixed(2);
+      taxAmountEl.value = taxAmount.toFixed(2);
+      totalEl.value = total.toFixed(2);
+    }
+
+    taxPercentEl.addEventListener('input', recomputeTotals);
+    if (!itemsEl.querySelector('[data-item-row="true"]')) addItemRow();
+
+    async function fetchInvoices() {
+      try {
+        const data = await api('/api/invoices');
+        renderInvoicesList(Array.isArray(data) ? data : []);
+      } catch {
+        renderInvoicesList([]);
+      }
+    }
+
+    function renderInvoicesList(items) {
+      listEl.innerHTML = '';
+      items.forEach(inv => {
+        const card = document.createElement('div');
+        card.style = 'border:1px solid #333;padding:10px;border-radius:8px;background:#111;margin-bottom:10px;';
+        const title = document.createElement('div');
+        title.style = 'font-weight:600;margin-bottom:6px;';
+        title.textContent = `${inv.clientName || ''} — ${inv.projectName || ''}`;
+        const meta = document.createElement('div');
+        meta.style = 'color:#999;margin-bottom:8px;';
+        meta.textContent = `Total: ${(inv.summary?.total ?? 0)} ${inv.currency || ''} • Due: ${inv.dueDate || '-'}`;
+        const actions = document.createElement('div');
+        actions.style = 'display:flex;gap:8px;';
+        const pdfBtn = document.createElement('a');
+        pdfBtn.className = 'btn-secondary-admin';
+        pdfBtn.href = `/api/invoices/${encodeURIComponent(inv.id)}/pdf`;
+        pdfBtn.target = '_blank';
+        pdfBtn.textContent = 'Download PDF';
+        const delBtn = document.createElement('button');
+        delBtn.type = 'button'; delBtn.className = 'btn-secondary-admin'; delBtn.textContent = 'Delete';
+        delBtn.addEventListener('click', async () => {
+          if (!confirm('Delete this invoice?')) return;
+          try { await api(`/api/invoices/${encodeURIComponent(inv.id)}`, { method: 'DELETE' }); fetchInvoices(); }
+          catch { alert('Failed to delete invoice (are you logged in?)'); }
+        });
+        actions.appendChild(pdfBtn);
+        actions.appendChild(delBtn);
+        card.appendChild(title); card.appendChild(meta); card.appendChild(actions);
+        listEl.appendChild(card);
+      });
+    }
+
+    if (addItemBtn && !addItemBtn._bound) {
+      addItemBtn._bound = true;
+      addItemBtn.addEventListener('click', () => addItemRow());
+    }
+
+    if (createBtn && !createBtn._bound) {
+      createBtn._bound = true;
+      createBtn.addEventListener('click', async () => {
+        const clientName = document.getElementById('inv-client-name').value.trim();
+        const clientAddress = document.getElementById('inv-client-address').value.trim();
+        const clientCity = document.getElementById('inv-client-city').value.trim();
+        const invoiceDate = document.getElementById('inv-invoice-date').value;
+        const dueDate = document.getElementById('inv-due-date').value;
+        const reference = document.getElementById('inv-reference').value.trim();
+        const currency = document.getElementById('inv-currency').value.trim() || 'USD';
+
+        const website = document.getElementById('inv-footer-website').value.trim();
+        const phone = document.getElementById('inv-footer-phone').value.trim();
+        const email = document.getElementById('inv-footer-email').value.trim();
+        const terms = document.getElementById('inv-terms').value.trim();
+        const refundPolicy = document.getElementById('inv-refund').value.trim();
+
+        // Only pick row divs we created (robust selection)
+        const rowsDivs = itemsEl.querySelectorAll('[data-item-row="true"]');
+        const rowsDescs = itemsEl.querySelectorAll('[data-item-desc="true"]');
+
+        const services = Array.from(rowsDivs).map((row, i) => {
+          const inputs = row.querySelectorAll('input');
+          let name = (inputs[0]?.value || '').trim();
+          const quantity = Number(inputs[1]?.value || 0);
+          const rate = Number(inputs[2]?.value || 0);
+          const amount = quantity * rate;
+          const description = (rowsDescs[i]?.value || '').trim();
+
+          // Auto-fill name from description if blank to satisfy server schema
+          if (!name && description) {
+            name = description.length > 120 ? description.slice(0, 120) : description;
+          }
+
+          // Visual hint: flag rows with neither name nor description
+          if (!name && !description) {
+            row.style.outline = '1px solid #f87171';
+            row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          } else {
+            row.style.outline = '';
+          }
+
+          return { name, description, quantity, rate, amount };
+        })
+        // Server requires a non-empty name for each line item
+        .filter(s => !!s.name)
+
+        if (!clientName || services.length === 0) {
+          alert('Client name and at least one line item are required.');
+          return;
+        }
+
+        const subtotal = services.reduce((sum, s) => sum + (s.amount || 0), 0);
+        const taxPercent = Number(taxPercentEl.value || 0);
+        const taxAmount = (subtotal * taxPercent) / 100;
+        const total = subtotal + taxAmount;
+
+        const payload = {
+          clientName,
+          clientAddress,
+          clientCity,
+          projectName: reference || 'Invoice',
+          reference,
+          invoiceDate,
+          dueDate,
+          services,
+          summary: { subtotal, taxPercent, taxAmount, discount: 0, total },
+          currency,
+          notes: '',
+          footer: {
+            website,
+            email,
+            phone,
+            terms,
+            refundPolicy
+          }
+        };
+
+        try {
+          await api('/api/invoices', { method: 'POST', json: payload });
+          alert('Invoice created.');
+          fetchInvoices();
+        } catch {
+          alert('Failed to create invoice. Please log in first.');
+        }
+      });
+    }
+
+    fetchInvoices();
+  }
 
   // --- Security tab ---
   function initSecurityTab() {
@@ -1366,967 +1496,345 @@
         title: 'Adobe Premiere & After Effects workflow tips',
         source: 'Adobe',
         url: 'https://www.adobe.com/products/aftereffects.html'
-      },
-      {
-        title: 'Video marketing in the AI era',
-        source: 'VEED Blog',
-        url: 'https://www.veed.io/'
-      },
-      {
-        title: 'Sound design & cleanup for creators',
-        source: 'Descript Guides',
-        url: 'https://www.descript.com/'
       }
     ],
     cyber: [
       {
-        title: 'OWASP Top 10 – Web security basics',
-        source: 'OWASP',
-        url: 'https://owasp.org/'
+        title: 'OWASP Top 10 for Web Applications',
+        source: 'OWASP Foundation',
+        url: 'https://owasp.org/www-project-top-ten/'
       },
       {
-        title: 'Intro to cybersecurity paths & careers',
-        source: 'freeCodeCamp',
-        url: 'https://www.freecodecamp.org/news/tag/cybersecurity/'
+        title: 'Web Security: SameSite, CORS and CSRF explained',
+        source: 'MDN Web Docs',
+        url: 'https://developer.mozilla.org/en-US/docs/Web/Security'
       },
       {
-        title: 'NIST Cybersecurity Framework (overview)',
-        source: 'NIST',
-        url: 'https://www.nist.gov/cyberframework'
+        title: 'Content Security Policy (CSP) — a practical guide',
+        source: 'Google Web Fundamentals',
+        url: 'https://web.dev/articles/csp'
       },
       {
-        title: 'Hardening your personal devices',
-        source: 'Kaspersky Academy',
-        url: 'https://www.kaspersky.com/resource-center'
+        title: 'JWT Best Practices — token storage and rotation',
+        source: 'Auth0 Blog',
+        url: 'https://auth0.com/blog/jwt-security-best-practices/'
+      },
+      {
+        title: 'Secure file uploads — validation and scanning',
+        source: 'OWASP Cheat Sheet',
+        url: 'https://cheatsheetseries.owasp.org/cheatsheets/File_Upload_Cheat_Sheet.html'
       }
     ]
   };
 
-  // --- Client Reviews tab (clientHighlights editor) ---
-  let reviewsTabInitialised = false;
+function renderRecognitionTabList() {
+  const listEl = document.getElementById('recognition-editor-list-tab');
+  if (!listEl) return;
 
-  function ensureClientHighlightsArray() {
-    if (!livePortfolio || typeof livePortfolio !== 'object') livePortfolio = {};
-    if (!Array.isArray(livePortfolio.clientHighlights)) livePortfolio.clientHighlights = [];
+  if (!Array.isArray(livePortfolio.recognition)) {
+    livePortfolio.recognition = [];
   }
 
-  function buildReviewsList() {
-    ensureClientHighlightsArray();
-    const list = document.getElementById('reviews-editor-list');
-    if (!list) return;
-    list.innerHTML = '';
+  listEl.innerHTML = '';
 
-    const items = livePortfolio.clientHighlights;
-    if (!items.length) {
-      const empty = document.createElement('p');
-      empty.style.color = '#9ca3af';
-      empty.style.fontSize = '0.85rem';
-      empty.textContent = 'No reviews yet. Click "+ Add review" to create your first client highlight card.';
-      list.appendChild(empty);
-      updateReviewsPreview();
-      return;
-    }
+  const makeRow = (labelText, inputEl) => {
+    const wrap = document.createElement('div');
+    wrap.style = 'margin-bottom:8px;';
+    const label = document.createElement('label');
+    label.textContent = labelText;
+    label.style = 'display:block;font-size:0.85rem;color:#bbb;margin-bottom:4px;';
+    wrap.appendChild(label);
+    wrap.appendChild(inputEl);
+    return wrap;
+  };
 
-    items.forEach((rev, index) => {
-      const row = document.createElement('div');
-      row.className = 'list-item';
-      row.setAttribute('data-review-index', String(index));
+  livePortfolio.recognition.forEach((item, idx) => {
+    const card = document.createElement('div');
+    card.style = 'border:1px solid #333;padding:12px;border-radius:8px;background:#111;margin-bottom:10px;';
 
-      row.innerHTML = `
-        <div class="list-item-main">
-          <div style="display:flex;flex-wrap:wrap;gap:0.5rem;align-items:flex-start;">
-            <input data-field="title" placeholder="Card title" value="${rev.title || ''}"
-                   style="flex:1 1 180px;padding:0.4rem 0.6rem;border-radius:6px;border:1px solid #333;background:#000;color:#fff;font-size:0.85rem;" />
-            <input data-field="platform" placeholder="Platform (Instagram, YouTube, etc.)" value="${rev.platform || ''}"
-                   style="flex:1 1 140px;padding:0.4rem 0.6rem;border-radius:6px;border:1px solid #333;background:#000;color:#fff;font-size:0.8rem;" />
-          </div>
-          <div style="margin-top:0.4rem;display:flex;flex-direction:column;gap:0.4rem;">
-            <input data-field="postUrl" placeholder="Post / reel / video URL" value="${rev.postUrl || ''}"
-                   style="width:100%;padding:0.4rem 0.6rem;border-radius:6px;border:1px solid #333;background:#000;color:#fff;font-size:0.8rem;" />
-            <textarea data-field="commentText" rows="2" placeholder="Best comment or review text"
-                      style="width:100%;padding:0.4rem 0.6rem;border-radius:6px;border:1px solid #333;background:#000;color:#fff;font-size:0.8rem;resize:vertical;">${rev.commentText || ''}</textarea>
-            <input data-field="commentAuthor" placeholder="Comment / client name" value="${rev.commentAuthor || ''}"
-                   style="width:100%;padding:0.4rem 0.6rem;border-radius:6px;border:1px solid #333;background:#000;color:#fff;font-size:0.8rem;" />
-          </div>
-        </div>
-        <div class="list-item-actions">
-          <button type="button" data-action="remove-review"
-                  style="padding:0.3rem 0.6rem;border-radius:6px;border:none;background:#ef4444;color:#fff;font-size:0.75rem;cursor:pointer;">Delete</button>
-        </div>
-      `;
-
-      row.querySelectorAll('[data-field]').forEach(input => {
-        const field = input.getAttribute('data-field');
-        const handler = () => {
-          ensureClientHighlightsArray();
-          const target = livePortfolio.clientHighlights[index] || (livePortfolio.clientHighlights[index] = {});
-          target[field] = input.value;
-          updateReviewsPreview();
-        };
-        input.addEventListener('input', handler);
-      });
-
-      const removeBtn = row.querySelector('[data-action="remove-review"]');
-      if (removeBtn) {
-        removeBtn.addEventListener('click', () => {
-          ensureClientHighlightsArray();
-          livePortfolio.clientHighlights.splice(index, 1);
-          buildReviewsList();
-        });
-      }
-
-      list.appendChild(row);
+    const iconInput = document.createElement('input');
+    iconInput.type = 'text';
+    iconInput.placeholder = 'Icon (emoji or text)';
+    iconInput.value = item.icon || '';
+    iconInput.style = 'width:100%;';
+    iconInput.addEventListener('input', () => {
+      livePortfolio.recognition[idx].icon = iconInput.value.trim();
+      renderRecognitionPreview();
     });
 
-    updateReviewsPreview();
-  }
-
-  function updateReviewsPreview() {
-    const box = document.getElementById('reviews-preview');
-    if (!box) return;
-    ensureClientHighlightsArray();
-    const items = livePortfolio.clientHighlights;
-    if (!items.length) {
-      box.innerHTML = '<p style="font-size:0.85rem;color:#9ca3af;">No reviews to preview yet.</p>';
-      return;
-    }
-    const lines = items.map(r => {
-      const name = r.commentAuthor || 'Client';
-      const platform = r.platform ? ` · ${r.platform}` : '';
-      return `“${(r.commentText || '').slice(0, 120)}${(r.commentText || '').length > 120 ? '…' : ''}” — ${name}${platform}`;
+    const titleInput = document.createElement('input');
+    titleInput.type = 'text';
+    titleInput.placeholder = 'Title';
+    titleInput.value = item.title || '';
+    titleInput.style = 'width:100%;';
+    titleInput.addEventListener('input', () => {
+      livePortfolio.recognition[idx].title = titleInput.value.trim();
+      renderRecognitionPreview();
     });
-    box.innerHTML = '<ul style="list-style:none;padding-left:0;margin:0;font-size:0.85rem;color:#e5e7eb;">' +
-      lines.map(t => `<li style=\"margin-bottom:0.4rem;\">${t}</li>`).join('') +
-      '</ul>';
-  }
 
-  function collectClientHighlightsFromEditor() {
-    ensureClientHighlightsArray();
-    const list = document.getElementById('reviews-editor-list');
-    if (!list) return livePortfolio.clientHighlights;
-    const rows = list.querySelectorAll('[data-review-index]');
-    const next = [];
-    rows.forEach(row => {
-      const get = (field) => {
-        const el = row.querySelector(`[data-field="${field}"]`);
-        return el ? el.value : '';
-      };
-      const obj = {
-        title: get('title'),
-        platform: get('platform'),
-        postUrl: get('postUrl'),
-        commentText: get('commentText'),
-        commentAuthor: get('commentAuthor')
-      };
-      // Skip completely empty rows
-      if (obj.title || obj.postUrl || obj.commentText || obj.commentAuthor || obj.platform) {
-        next.push(obj);
-      }
+    const eventInput = document.createElement('input');
+    eventInput.type = 'text';
+    eventInput.placeholder = 'Event';
+    eventInput.value = item.event || '';
+    eventInput.style = 'width:100%;';
+    eventInput.addEventListener('input', () => {
+      livePortfolio.recognition[idx].event = eventInput.value.trim();
+      renderRecognitionPreview();
     });
-    livePortfolio.clientHighlights = next;
-    return next;
-  }
 
-  function initReviewsTab() {
-    if (reviewsTabInitialised) {
-      buildReviewsList();
-      return;
-    }
-    reviewsTabInitialised = true;
+    const imageUrlInput = document.createElement('input');
+    imageUrlInput.type = 'text';
+    imageUrlInput.placeholder = 'Image URL';
+    imageUrlInput.value = item.imageUrl || '';
+    imageUrlInput.style = 'width:100%;';
+    imageUrlInput.addEventListener('input', () => {
+      livePortfolio.recognition[idx].imageUrl = imageUrlInput.value.trim();
+      renderRecognitionPreview();
+    });
 
-    const addBtn = document.getElementById('reviews-add');
-    const saveBtn = document.getElementById('reviews-save');
-    const reloadBtn = document.getElementById('reviews-reload');
-
-    if (addBtn && !addBtn.__bound) {
-      addBtn.__bound = true;
-      addBtn.addEventListener('click', () => {
-        ensureClientHighlightsArray();
-        livePortfolio.clientHighlights.push({
-          title: 'Clients Success Highlight',
-          platform: '',
-          postUrl: '',
-          commentText: '',
-          commentAuthor: ''
-        });
-        buildReviewsList();
-      });
-    }
-
-    if (saveBtn && !saveBtn.__bound) {
-      saveBtn.__bound = true;
-      saveBtn.addEventListener('click', () => {
-        try {
-          collectClientHighlightsFromEditor();
-          const payload = JSON.parse(JSON.stringify(livePortfolio || {}));
-          api('/api/portfolio', { method: 'PUT', json: payload })
-            .then(() => {
-              try {
-                localStorage.setItem('vr_portfolio_live_data', JSON.stringify(payload));
-              } catch {}
-              alert('Client reviews saved. The public site will update on next refresh.');
-            })
-            .catch(() => alert('Failed to save client reviews.'));
-        } catch (e) {
-          alert('Failed to prepare client reviews payload.');
+    const imageFileInput = document.createElement('input');
+    imageFileInput.type = 'file';
+    imageFileInput.accept = 'image/*';
+    imageFileInput.style = 'width:100%;';
+    imageFileInput.addEventListener('change', async (e) => {
+      const file = e.target.files && e.target.files[0];
+      if (!file) return;
+      try {
+        const result = await uploadFileToServer(file, 'images');
+        if (result && result.url) {
+          livePortfolio.recognition[idx].imageUrl = result.url;
+          imageUrlInput.value = result.url;
+          renderRecognitionPreview();
+        } else {
+          alert('Upload failed: no URL returned');
         }
-      });
-    }
-
-    if (reloadBtn && !reloadBtn.__bound) {
-      reloadBtn.__bound = true;
-      reloadBtn.addEventListener('click', () => {
-        fetch('/portfolio_data.json?' + Date.now())
-          .then(res => res.json())
-          .then(data => {
-            livePortfolio = data || {};
-            buildReviewsList();
-          })
-          .catch(() => alert('Failed to reload live portfolio data.'));
-      });
-    }
-
-    buildReviewsList();
-  }
-
-  // Invoice system configuration (fixed per spec)
-  const INVOICE_COMPANY_NAME = 'VR PRODUCTIONS';
-  const INVOICE_COMPANY_ADDRESS = 'Nagpur, Maharashtra, India';
-  const INVOICE_COMPANY_CITY_LINE = 'Nagpur, Maharashtra, India';
-  const INVOICE_TAX_PERCENT = 10;
-  const INVOICE_CURRENCY = 'US$'; // default; admin can override per invoice
-  const INVOICE_PAYMENT_NOTE = 'Please pay within 15 days of receiving this invoice.';
-
-  function buildInvoiceForm() {
-    if (!invoiceFormEl) return;
-    invoiceFormEl.innerHTML = `
-      <div class="field-group">
-        <h2 style="margin:0 0 0.5rem 0;">Billing & Invoice Management</h2>
-        <p style="font-size:0.85rem;color:#aaa;">Create clean, client-ready invoices that match your VR PRODUCTIONS template.</p>
-      </div>
-      <input id="inv_project_name" type="hidden" value="Invoice" />
-      <input id="inv_project_id" type="hidden" />
-      <div class="two-column">
-        <div>
-          <h3>Client & Invoice Details</h3>
-          <div class="field-group">
-            <label for="inv_client_name">Client / Company Name</label>
-            <input id="inv_client_name" type="text" />
-          </div>
-          <div class="field-group">
-            <label for="inv_client_address">Client Address</label>
-            <input id="inv_client_address" type="text" />
-          </div>
-          <div class="field-group">
-            <label for="inv_client_city">City / Country / PIN</label>
-            <input id="inv_client_city" type="text" />
-          </div>
-          <div class="field-group">
-            <label for="inv_invoice_date">Invoice Date</label>
-            <input id="inv_invoice_date" type="text" placeholder="01 Jan, 2025" />
-          </div>
-          <div class="field-group">
-            <label for="inv_due_date">Due Date</label>
-            <input id="inv_due_date" type="text" placeholder="15 Jan, 2025" />
-          </div>
-          <div class="field-group">
-            <label for="inv_reference">Reference (INV-XXX)</label>
-            <input id="inv_reference" type="text" placeholder="INV-001" />
-          </div>
-          <div class="field-group">
-            <label for="inv_currency">Currency (e.g. USD, INR, EUR)</label>
-            <input id="inv_currency" type="text" placeholder="US$" />
-          </div>
-        </div>
-        <div>
-          <h3>Footer (per invoice)</h3>
-          <div class="field-group">
-            <label for="inv_footer_website">Website</label>
-            <input id="inv_footer_website" type="text" placeholder="https://yourwebsite.com" />
-          </div>
-          <div class="field-group">
-            <label for="inv_footer_phone">Phone</label>
-            <input id="inv_footer_phone" type="text" placeholder="+91 00000 00000" />
-          </div>
-          <div class="field-group">
-            <label for="inv_footer_email">Email</label>
-            <input id="inv_footer_email" type="email" placeholder="hello@example.com" />
-          </div>
-        </div>
-      </div>
-      <div class="field-group">
-        <h3>Line Items</h3>
-        <p style="font-size:0.8rem;color:#aaa;margin-bottom:0.5rem;">Each row becomes one line in the invoice (Item, Qty, Rate, Line Total).</p>
-        <div id="inv_services_list" class="list"></div>
-        <button type="button" id="inv_add_service" class="btn-secondary-admin" style="margin-top:0.5rem;">+ Add item</button>
-      </div>
-      <div class="two-column">
-        <div>
-          <div class="field-group">
-            <label for="inv_subtotal">Subtotal</label>
-            <input id="inv_subtotal" type="text" readonly />
-          </div>
-          <div class="field-group">
-            <label for="inv_tax_amount">Tax (10%)</label>
-            <input id="inv_tax_amount" type="text" readonly />
-          </div>
-        </div>
-        <div>
-          <div class="field-group">
-            <label for="inv_total">Total Due</label>
-            <input id="inv_total" type="text" readonly />
-          </div>
-        </div>
-      </div>
-      <div class="field-group">
-        <label for="inv_terms">Payment terms</label>
-        <textarea id="inv_terms" rows="3">${INVOICE_PAYMENT_NOTE}</textarea>
-      </div>
-      <div class="field-group">
-        <label for="inv_refund">Refund policy</label>
-        <textarea id="inv_refund" rows="3">Refunds are handled on a case-by-case basis and are not guaranteed once work has started.</textarea>
-      </div>
-    `;
-
-    // Lock system-defined fields so admin cannot change company / tax
-    const setReadOnlyValue = (id, value) => {
-      const el = document.getElementById(id);
-      if (!el) return;
-      if (typeof value === 'string') el.value = value;
-      el.readOnly = true;
-      el.style.opacity = '0.75';
-      el.style.pointerEvents = 'none';
-    };
-
-    setReadOnlyValue('inv_tax_percent', String(INVOICE_TAX_PERCENT));
-
-    // Currency: allow admin to choose, but default to INVOICE_CURRENCY if empty
-    const currencyInput = document.getElementById('inv_currency');
-    if (currencyInput && !currencyInput.value) {
-      currencyInput.value = INVOICE_CURRENCY;
-    }
-
-    // Pre-fill invoice date with today if empty
-    const invoiceDateInput = document.getElementById('inv_invoice_date');
-    if (invoiceDateInput && !invoiceDateInput.value) {
-      const now = new Date();
-      invoiceDateInput.value = now.toLocaleDateString(undefined, {
-        day: '2-digit',
-        month: 'short',
-        year: 'numeric'
-      });
-    }
-
-    const servicesListEl = invoiceFormEl.querySelector('#inv_services_list');
-    const addServiceBtn = invoiceFormEl.querySelector('#inv_add_service');
-
-    function addServiceRow(initial) {
-      const row = document.createElement('div');
-      row.className = 'list-item';
-      row.setAttribute('data-service-row', '1');
-      const svc = initial || {};
-      row.innerHTML = `
-        <div class="list-item-main">
-          <div style="display:flex;flex-wrap:wrap;gap:0.5rem;align-items:flex-start;">
-            <input data-service-field="name" placeholder="Service name" value="${svc.name || ''}"
-                   style="flex:2;min-width:160px;padding:0.4rem 0.6rem;border-radius:6px;border:1px solid #333;background:#000;color:#fff;font-size:0.85rem;" />
-            <input data-service-field="quantity" placeholder="Qty" type="number" step="1" min="0" value="${svc.quantity != null ? svc.quantity : ''}"
-                   style="flex:0.5;min-width:70px;padding:0.4rem 0.6rem;border-radius:6px;border:1px solid #333;background:#000;color:#fff;font-size:0.85rem;" />
-            <input data-service-field="rate" placeholder="Rate" type="number" step="0.01" min="0" value="${svc.rate != null ? svc.rate : ''}"
-                   style="flex:0.8;min-width:100px;padding:0.4rem 0.6rem;border-radius:6px;border:1px solid #333;background:#000;color:#fff;font-size:0.85rem;" />
-            <input data-service-field="amount" placeholder="Amount" type="number" step="0.01" min="0" value="${svc.amount != null ? svc.amount : ''}"
-                   style="flex:0.8;min-width:100px;padding:0.4rem 0.6rem;border-radius:6px;border:1px solid #333;background:#000;color:#fff;font-size:0.85rem;" />
-          </div>
-          <div style="margin-top:0.4rem;">
-            <textarea data-service-field="description" rows="2" placeholder="Description"
-                      style="width:100%;padding:0.4rem 0.6rem;border-radius:6px;border:1px solid #333;background:#000;color:#fff;font-size:0.8rem;resize:vertical;">${svc.description || ''}</textarea>
-          </div>
-        </div>
-        <div class="list-item-actions">
-          <button type="button" data-action="remove-service"
-                  style="padding:0.3rem 0.6rem;border-radius:6px;border:none;background:#ef4444;color:#fff;font-size:0.75rem;cursor:pointer;">Delete</button>
-        </div>
-      `;
-
-      const qtyInput = row.querySelector('[data-service-field="quantity"]');
-      const rateInput = row.querySelector('[data-service-field="rate"]');
-      const amountInput = row.querySelector('[data-service-field="amount"]');
-      const recalcRow = () => {
-        const q = parseFloat(qtyInput.value || '0');
-        const r = parseFloat(rateInput.value || '0');
-        if (!isNaN(q) && !isNaN(r)) {
-          const a = q * r;
-          amountInput.value = a ? a.toFixed(2) : '';
-        }
-        recalcInvoiceSummary();
-      };
-      qtyInput.addEventListener('input', recalcRow);
-      rateInput.addEventListener('input', recalcRow);
-      amountInput.addEventListener('input', recalcInvoiceSummary);
-
-      const removeBtn = row.querySelector('[data-action="remove-service"]');
-      removeBtn.addEventListener('click', () => {
-        row.remove();
-        recalcInvoiceSummary();
-      });
-
-      servicesListEl.appendChild(row);
-    }
-
-    function recalcInvoiceSummary() {
-      const rows = servicesListEl.querySelectorAll('[data-service-row]');
-      let servicesSubtotal = 0;
-      rows.forEach(row => {
-        const amountInput = row.querySelector('[data-service-field="amount"]');
-        const v = parseFloat((amountInput && amountInput.value) || '0');
-        if (!isNaN(v)) servicesSubtotal += v;
-      });
-      const extraRevision = parseFloat((document.getElementById('inv_extra_revision') || {}).value || '0') || 0;
-      const expressDelivery = parseFloat((document.getElementById('inv_express_delivery') || {}).value || '0') || 0;
-      const addons = parseFloat((document.getElementById('inv_addons_amount') || {}).value || '0') || 0;
-      const subtotal = servicesSubtotal + extraRevision + expressDelivery + addons;
-      const subtotalInput = document.getElementById('inv_subtotal');
-      if (subtotalInput) subtotalInput.value = subtotal.toFixed(2);
-
-      const taxPercentInput = document.getElementById('inv_tax_percent');
-      const taxAmountInput = document.getElementById('inv_tax_amount');
-      const taxPercent = INVOICE_TAX_PERCENT;
-      if (taxPercentInput) taxPercentInput.value = String(INVOICE_TAX_PERCENT);
-      const taxAmount = subtotal * taxPercent / 100;
-      if (taxAmountInput) taxAmountInput.value = taxAmount.toFixed(2);
-
-      const discountInput = document.getElementById('inv_discount');
-      const discount = 0;
-      if (discountInput) discountInput.value = '0';
-
-      const totalInput = document.getElementById('inv_total');
-      const total = subtotal + taxAmount - discount;
-      if (totalInput) totalInput.value = total.toFixed(2);
-    }
-
-    if (addServiceBtn) {
-      addServiceBtn.addEventListener('click', () => {
-        addServiceRow({});
-        recalcInvoiceSummary();
-      });
-    }
-
-    // Initial service row
-    addServiceRow({});
-    recalcInvoiceSummary();
-
-  }
-
-  function collectInvoiceFormData() {
-    const getVal = (id) => {
-      const el = document.getElementById(id);
-      return el ? el.value.trim() : '';
-    };
-
-    const clientName = getVal('inv_client_name');
-    if (!clientName) {
-      alert('Client name is required.');
-      return null;
-    }
-
-    const projectName = getVal('inv_project_name') || 'Invoice';
-
-    let projectId = getVal('inv_project_id');
-    if (!projectId) {
-      projectId = 'AB' + Math.random().toString(36).slice(2, 6).toUpperCase() + '-' + Math.floor(Math.random() * 90 + 10);
-    }
-
-    const services = [];
-    const servicesListEl = invoiceFormEl.querySelector('#inv_services_list');
-    if (servicesListEl) {
-      servicesListEl.querySelectorAll('[data-service-row]').forEach(row => {
-        const getField = (name) => {
-          const el = row.querySelector(`[data-service-field="${name}"]`);
-          return el ? el.value.trim() : '';
-        };
-        const name = getField('name');
-        const desc = getField('description');
-        const qtyVal = getField('quantity');
-        const rateVal = getField('rate');
-        const amtVal = getField('amount');
-        if (!name && !desc && !qtyVal && !rateVal && !amtVal) return;
-        const quantity = qtyVal ? Number(qtyVal) || 0 : 0;
-        const rate = rateVal ? Number(rateVal) || 0 : 0;
-        const amount = amtVal ? Number(amtVal) || (quantity * rate) : (quantity * rate);
-        services.push({ name, description: desc, quantity, rate, amount });
-      });
-    }
-
-    if (!services.length) {
-      alert('Add at least one service.');
-      return null;
-    }
-
-    const extraRevision = Number(getVal('inv_extra_revision') || '0') || 0;
-    const expressDelivery = Number(getVal('inv_express_delivery') || '0') || 0;
-    const addonsAmount = Number(getVal('inv_addons_amount') || '0') || 0;
-    const addonsDescription = getVal('inv_addons_description');
-
-    const subtotal = Number(getVal('inv_subtotal') || '0') || 0;
-    const taxPercent = Number(getVal('inv_tax_percent') || '0') || 0;
-    const taxAmount = Number(getVal('inv_tax_amount') || '0') || 0;
-    const discount = Number(getVal('inv_discount') || '0') || 0;
-    const total = Number(getVal('inv_total') || '0') || 0;
-
-    const paymentStatus = getVal('inv_payment_status') || 'unpaid';
-    const paymentMethod = getVal('inv_payment_method') || '';
-
-    const savedLogoUrl = (livePortfolio && livePortfolio.adminConfig && livePortfolio.adminConfig.branding && livePortfolio.adminConfig.branding.logoUrl) || '';
-
-    const data = {
-      clientName,
-      clientEmail: getVal('inv_client_email'),
-      clientPhone: getVal('inv_client_phone'),
-      clientAddress: getVal('inv_client_address'),
-      clientCity: getVal('inv_client_city'),
-      projectName,
-      projectId,
-      reference: getVal('inv_reference'),
-      invoiceDate: getVal('inv_invoice_date'),
-      dueDate: getVal('inv_due_date'),
-      services,
-      additionalCharges: {
-        extraRevision,
-        expressDelivery,
-        addonsAmount,
-        addonsDescription
-      },
-      summary: {
-        subtotal,
-        taxPercent,
-        taxAmount,
-        discount,
-        total
-      },
-      amount: total,
-      currency: getVal('inv_currency') || INVOICE_CURRENCY,
-      paymentStatus,
-      status: paymentStatus,
-      paymentMethod,
-      notes: getVal('inv_notes'),
-      footer: {
-        logoUrl: savedLogoUrl,
-        businessName: INVOICE_COMPANY_NAME,
-        contact: getVal('inv_business_contact'),
-        address: INVOICE_COMPANY_ADDRESS,
-        city: INVOICE_COMPANY_CITY_LINE,
-        taxId: getVal('inv_tax_id'),
-        website: getVal('inv_footer_website'),
-        email: getVal('inv_footer_email'),
-        phone: getVal('inv_footer_phone'),
-        terms: getVal('inv_terms'),
-        refundPolicy: getVal('inv_refund')
+      } catch {
+        alert('Image upload failed. Please log in first.');
       }
-    };
-
-    return data;
-  }
-
-  try {
-    buildInvoiceForm();
-  } catch (e) {
-    console && console.error && console.error('Failed to initialize invoice form', e);
-  }
-
-  function ensureAdminConfig() {
-    if (!livePortfolio || typeof livePortfolio !== 'object') livePortfolio = {};
-    if (!livePortfolio.adminConfig || typeof livePortfolio.adminConfig !== 'object') {
-      livePortfolio.adminConfig = {};
-    }
-    return livePortfolio.adminConfig;
-  }
-
-  function getAiToolsData() {
-    const cfg = ensureAdminConfig();
-    if (!Array.isArray(cfg.aiTools) || !cfg.aiTools.length) {
-      cfg.aiTools = JSON.parse(JSON.stringify(DEFAULT_AI_TOOLS_DATA));
-    }
-    return cfg.aiTools;
-  }
-
-  function buildAiToolsSection() {
-    const container = document.getElementById('ai-tools-container');
-    const editor = document.getElementById('ai-tools-editor');
-    const addCategoryBtn = document.getElementById('ai-add-category');
-    const saveBtn = document.getElementById('ai-save');
-    if (!container || !editor) return;
-
-    const data = getAiToolsData();
-
-    // --- Preview (right column) ---
-    container.innerHTML = '';
-    const sorted = data.slice().sort((a, b) => (Number(a.priority || 0) - Number(b.priority || 0)));
-
-    sorted.forEach(group => {
-      const header = document.createElement('h3');
-      header.textContent = group.category || 'Category';
-      header.style.margin = '0.25rem 0 0.5rem 0';
-      header.style.fontSize = '0.95rem';
-      header.style.color = '#e5e7eb';
-      container.appendChild(header);
-
-      (group.tools || []).forEach(tool => {
-        const item = document.createElement('div');
-        item.className = 'list-item';
-
-        const main = document.createElement('div');
-        main.className = 'list-item-main';
-
-        const name = document.createElement('div');
-        name.style.fontWeight = '600';
-        name.style.fontSize = '0.95rem';
-        name.textContent = tool.name || '';
-
-        const desc = document.createElement('p');
-        desc.style.fontSize = '0.8rem';
-        desc.style.color = '#aaa';
-        desc.style.margin = '0.35rem 0 0.4rem 0';
-        desc.textContent = tool.description || '';
-
-        const link = document.createElement('a');
-        link.href = tool.url || '#';
-        link.target = '_blank';
-        link.rel = 'noopener noreferrer';
-        link.style.fontSize = '0.8rem';
-        link.style.color = '#60a5fa';
-        link.style.textDecoration = 'none';
-        link.textContent = tool.url || '';
-
-        main.appendChild(name);
-        main.appendChild(desc);
-        main.appendChild(link);
-        item.appendChild(main);
-
-        item.addEventListener('click', (e) => {
-          if (e.target && e.target.tagName === 'A') return;
-          if (tool.url) window.open(tool.url, '_blank');
-        });
-
-        container.appendChild(item);
-      });
     });
 
-    // --- Editor (left column) ---
-    editor.innerHTML = '';
+    const imagePreview = document.createElement('div');
+    imagePreview.style = 'margin-top:6px;display:flex;align-items:center;gap:8px;';
+    const previewImg = document.createElement('img');
+    previewImg.src = item.imageUrl || '';
+    previewImg.alt = 'Image preview';
+    previewImg.style = 'max-height:60px;max-width:120px;border-radius:6px;border:1px solid #333;';
+    imagePreview.appendChild(previewImg);
+    imageUrlInput.addEventListener('input', () => {
+      previewImg.src = (livePortfolio.recognition[idx].imageUrl || '').trim();
+    });
 
-    data.forEach((group, groupIndex) => {
-      const wrapper = document.createElement('div');
-      wrapper.className = 'list-item';
+    const linkInput = document.createElement('input');
+    linkInput.type = 'text';
+    linkInput.placeholder = 'Link URL';
+    linkInput.value = item.link || '';
+    linkInput.style = 'width:100%;';
+    linkInput.addEventListener('input', () => {
+      livePortfolio.recognition[idx].link = linkInput.value.trim();
+      renderRecognitionPreview();
+    });
 
-      const main = document.createElement('div');
-      main.className = 'list-item-main';
+    const actions = document.createElement('div');
+    actions.style = 'display:flex;gap:8px;justify-content:flex-end;margin-top:10px;';
+    const deleteBtn = document.createElement('button');
+    deleteBtn.type = 'button';
+    deleteBtn.className = 'btn-secondary-admin';
+    deleteBtn.textContent = 'Delete';
+    deleteBtn.addEventListener('click', () => {
+      livePortfolio.recognition.splice(idx, 1);
+      renderRecognitionTabList();
+    });
+    actions.appendChild(deleteBtn);
 
-      const headerRow = document.createElement('div');
-      headerRow.style.display = 'flex';
-      headerRow.style.flexWrap = 'wrap';
-      headerRow.style.gap = '0.5rem';
+    card.appendChild(makeRow('Icon', iconInput));
+    card.appendChild(makeRow('Title', titleInput));
+    card.appendChild(makeRow('Event', eventInput));
+    card.appendChild(makeRow('Image URL', imageUrlInput));
+    card.appendChild(makeRow('Select Image', imageFileInput));
+    card.appendChild(imagePreview);
+    card.appendChild(makeRow('Link', linkInput));
+    card.appendChild(actions);
 
-      const catInput = document.createElement('input');
-      catInput.value = group.category || '';
-      catInput.placeholder = 'Category name';
-      catInput.style.flex = '2';
-      catInput.style.minWidth = '180px';
-      catInput.style.padding = '0.4rem 0.6rem';
-      catInput.style.borderRadius = '6px';
-      catInput.style.border = '1px solid #333';
-      catInput.style.background = '#000';
-      catInput.style.color = '#fff';
-      catInput.style.fontSize = '0.85rem';
+    listEl.appendChild(card);
+  });
 
-      const prioInput = document.createElement('input');
-      prioInput.type = 'number';
-      prioInput.step = '1';
-      prioInput.placeholder = 'Priority';
-      prioInput.value = String(group.priority || 0);
-      prioInput.style.flex = '1';
-      prioInput.style.minWidth = '110px';
-      prioInput.style.padding = '0.4rem 0.6rem';
-      prioInput.style.borderRadius = '6px';
-      prioInput.style.border = '1px solid #333';
-      prioInput.style.background = '#000';
-      prioInput.style.color = '#fff';
-      prioInput.style.fontSize = '0.85rem';
+  renderRecognitionPreview();
+}
 
-      headerRow.appendChild(catInput);
-      headerRow.appendChild(prioInput);
-      main.appendChild(headerRow);
+function renderRecognitionPreview() {
+  const previewEl = document.getElementById('recognition-preview');
+  if (!previewEl) return;
+  previewEl.innerHTML = '';
 
-      const toolsWrap = document.createElement('div');
-      toolsWrap.style.marginTop = '0.65rem';
-      toolsWrap.style.display = 'flex';
-      toolsWrap.style.flexDirection = 'column';
-      toolsWrap.style.gap = '0.5rem';
+  livePortfolio.recognition.forEach((r) => {
+    const row = document.createElement('div');
+    row.style = 'padding:6px 8px;border-bottom:1px solid #222;';
+    const icon = r.icon || '🏆';
+    const title = r.title || '';
+    const event = r.event ? ` — ${r.event}` : '';
+    row.textContent = `${icon} ${title}${event}`;
+    previewEl.appendChild(row);
+  });
+}
 
-      const tools = Array.isArray(group.tools) ? group.tools : (group.tools = []);
-      tools.forEach((tool, toolIndex) => {
-        const row = document.createElement('div');
-        row.style.display = 'grid';
-        row.style.gridTemplateColumns = '1fr 1fr';
-        row.style.gap = '0.5rem';
+function initRecognitionTab() {
+  const addBtn = document.getElementById('recognition-add');
+  const saveBtn = document.getElementById('recognition-save');
+  const reloadBtn = document.getElementById('recognition-reload');
 
-        const nameInput = document.createElement('input');
-        nameInput.placeholder = 'Tool name';
-        nameInput.value = tool.name || '';
-        nameInput.style.padding = '0.35rem 0.55rem';
-        nameInput.style.borderRadius = '6px';
-        nameInput.style.border = '1px solid #333';
-        nameInput.style.background = '#000';
-        nameInput.style.color = '#fff';
-        nameInput.style.fontSize = '0.8rem';
+  if (!Array.isArray(livePortfolio.recognition)) {
+    livePortfolio.recognition = [];
+  }
 
-        const urlInput = document.createElement('input');
-        urlInput.placeholder = 'https://...';
-        urlInput.value = tool.url || '';
-        urlInput.style.padding = '0.35rem 0.55rem';
-        urlInput.style.borderRadius = '6px';
-        urlInput.style.border = '1px solid #333';
-        urlInput.style.background = '#000';
-        urlInput.style.color = '#fff';
-        urlInput.style.fontSize = '0.8rem';
+  renderRecognitionTabList();
 
-        const descInput = document.createElement('textarea');
-        descInput.placeholder = 'Short description';
-        descInput.rows = 2;
-        descInput.value = tool.description || '';
-        descInput.style.gridColumn = '1 / -1';
-        descInput.style.padding = '0.35rem 0.55rem';
-        descInput.style.borderRadius = '6px';
-        descInput.style.border = '1px solid #333';
-        descInput.style.background = '#000';
-        descInput.style.color = '#fff';
-        descInput.style.fontSize = '0.8rem';
+  if (addBtn && !addBtn._bound) {
+    addBtn._bound = true;
+    addBtn.addEventListener('click', () => {
+      livePortfolio.recognition.push({
+        icon: '🏆',
+        title: '',
+        event: '',
+        imageUrl: '',
+        link: ''
+      });
+      renderRecognitionTabList();
+    });
+  }
 
-        const delBtn = document.createElement('button');
-        delBtn.type = 'button';
-        delBtn.textContent = 'Delete tool';
-        delBtn.style.padding = '0.3rem 0.6rem';
-        delBtn.style.borderRadius = '6px';
-        delBtn.style.border = 'none';
-        delBtn.style.background = '#ef4444';
-        delBtn.style.color = '#fff';
-        delBtn.style.fontSize = '0.75rem';
-        delBtn.style.cursor = 'pointer';
-        delBtn.style.gridColumn = '1 / -1';
-        delBtn.style.justifySelf = 'start';
+  if (saveBtn && !saveBtn._bound) {
+    saveBtn._bound = true;
+    saveBtn.addEventListener('click', async () => {
+      try {
+        const clone = { ...livePortfolio };
+        applyVirtualFieldsFromForm(clone);
+        await api('/api/portfolio', { method: 'PUT', json: clone });
+        alert('Recognition saved.');
+      } catch (e) {
+        alert('Save failed. Please log in first.');
+      }
+    });
+  }
 
-        const sync = () => {
-          tool.name = nameInput.value;
-          tool.url = urlInput.value;
-          tool.description = descInput.value;
-        };
+  if (reloadBtn && !reloadBtn._bound) {
+    reloadBtn._bound = true;
+    reloadBtn.addEventListener('click', async () => {
+      try {
+        const fresh = await api('/portfolio_data.json');
+        if (fresh && typeof fresh === 'object') {
+          livePortfolio = fresh;
+          renderRecognitionTabList();
+        }
+      } catch (e) {
+        alert('Failed to reload recognition.');
+      }
+    });
+  }
+}
 
-        nameInput.addEventListener('input', sync);
-        urlInput.addEventListener('input', sync);
-        descInput.addEventListener('input', sync);
+function initReviewsTab() {
+  const listEl = document.getElementById('reviews-editor-list');
+  const addBtn = document.getElementById('reviews-add');
+  const saveBtn = document.getElementById('reviews-save');
+  const previewEl = document.getElementById('reviews-preview');
 
-        delBtn.addEventListener('click', () => {
-          tools.splice(toolIndex, 1);
-          buildAiToolsSection();
-        });
+  if (!Array.isArray(livePortfolio.clientHighlights)) {
+    livePortfolio.clientHighlights = [];
+  }
 
-        row.appendChild(nameInput);
-        row.appendChild(urlInput);
-        row.appendChild(descInput);
-        row.appendChild(delBtn);
-        toolsWrap.appendChild(row);
+  function renderList() {
+    if (!listEl) return;
+    listEl.innerHTML = '';
+    livePortfolio.clientHighlights.forEach((item, idx) => {
+      const card = document.createElement('div');
+      card.style = 'border:1px solid #333;padding:12px;border-radius:8px;background:#111;margin-bottom:10px;';
+
+      const title = document.createElement('input');
+      title.type = 'text'; title.placeholder = 'Clients Success Highlight'; title.value = item.title || '';
+      title.style = 'width:100%; margin-bottom:8px;';
+      title.addEventListener('input', () => { livePortfolio.clientHighlights[idx].title = title.value.trim(); renderPreview(); });
+
+      const platform = document.createElement('input');
+      platform.type = 'text'; platform.placeholder = 'Platform (Instagram, YouTube, etc.)'; platform.value = item.platform || '';
+      platform.style = 'width:100%; margin-bottom:8px;';
+      platform.addEventListener('input', () => { livePortfolio.clientHighlights[idx].platform = platform.value.trim(); renderPreview(); });
+
+      const link = document.createElement('input');
+      link.type = 'text'; link.placeholder = 'Post / reel / video URL'; link.value = item.link || '';
+      link.style = 'width:100%; margin-bottom:8px;';
+      link.addEventListener('input', () => { livePortfolio.clientHighlights[idx].link = link.value.trim(); renderPreview(); });
+
+      const reviewText = document.createElement('textarea');
+      reviewText.rows = 3; reviewText.placeholder = 'Best comment or review text'; reviewText.value = item.reviewText || item.description || '';
+      reviewText.style = 'width:100%; margin-bottom:8px;';
+      reviewText.addEventListener('input', () => {
+        livePortfolio.clientHighlights[idx].reviewText = reviewText.value.trim();
+        livePortfolio.clientHighlights[idx].description = reviewText.value.trim(); // keep existing field for public site
+        renderPreview();
       });
 
-      const addToolBtn = document.createElement('button');
-      addToolBtn.type = 'button';
-      addToolBtn.textContent = '+ Add tool';
-      addToolBtn.className = 'btn-secondary-admin';
-      addToolBtn.style.marginTop = '0.5rem';
-
-      addToolBtn.addEventListener('click', () => {
-        tools.push({ name: '', url: '', description: '' });
-        buildAiToolsSection();
-      });
-
-      main.appendChild(toolsWrap);
-      main.appendChild(addToolBtn);
-      wrapper.appendChild(main);
+      const clientName = document.createElement('input');
+      clientName.type = 'text'; clientName.placeholder = 'Comment / client name'; clientName.value = item.clientName || '';
+      clientName.style = 'width:100%; margin-bottom:8px;';
+      clientName.addEventListener('input', () => { livePortfolio.clientHighlights[idx].clientName = clientName.value.trim(); renderPreview(); });
 
       const actions = document.createElement('div');
-      actions.className = 'list-item-actions';
-      const delCatBtn = document.createElement('button');
-      delCatBtn.type = 'button';
-      delCatBtn.textContent = 'Delete';
-      delCatBtn.style.padding = '0.3rem 0.6rem';
-      delCatBtn.style.borderRadius = '6px';
-      delCatBtn.style.border = 'none';
-      delCatBtn.style.background = '#ef4444';
-      delCatBtn.style.color = '#fff';
-      delCatBtn.style.fontSize = '0.75rem';
-      delCatBtn.style.cursor = 'pointer';
-      delCatBtn.addEventListener('click', () => {
-        data.splice(groupIndex, 1);
-        buildAiToolsSection();
-      });
-      actions.appendChild(delCatBtn);
-      wrapper.appendChild(actions);
+      actions.style = 'display:flex;gap:8px;justify-content:flex-end;';
+      const del = document.createElement('button');
+      del.type = 'button'; del.className = 'btn-secondary-admin'; del.textContent = 'Delete';
+      del.addEventListener('click', () => { livePortfolio.clientHighlights.splice(idx, 1); renderList(); renderPreview(); });
+      actions.appendChild(del);
 
-      catInput.addEventListener('input', () => {
-        group.category = catInput.value;
-      });
-      prioInput.addEventListener('input', () => {
-        group.priority = Number(prioInput.value || 0) || 0;
-      });
+      card.appendChild(title);
+      card.appendChild(platform);
+      card.appendChild(link);
+      card.appendChild(reviewText);
+      card.appendChild(clientName);
+      card.appendChild(actions);
 
-      editor.appendChild(wrapper);
+      listEl.appendChild(card);
     });
-
-    if (addCategoryBtn && !addCategoryBtn.__bound) {
-      addCategoryBtn.__bound = true;
-      addCategoryBtn.addEventListener('click', () => {
-        const d = getAiToolsData();
-        d.push({ category: 'New Category', priority: d.length, tools: [] });
-        buildAiToolsSection();
-      });
-    }
-
-    if (saveBtn && !saveBtn.__bound) {
-      saveBtn.__bound = true;
-      saveBtn.addEventListener('click', () => {
-        // Persist AI tools inside portfolio_data.json
-        api('/api/portfolio', { method: 'PUT', json: livePortfolio })
-          .then(() => {
-            alert('AI tools saved.');
-          })
-          .catch(() => alert('Failed to save AI tools.'));
-      });
-    }
   }
 
-  function buildLearningHub() {
-    const videoList = document.getElementById('learning-video');
-    const cyberList = document.getElementById('learning-cyber');
-    if (!videoList || !cyberList) return;
-
-    const buildList = (target, items) => {
-      target.innerHTML = '';
-      items.forEach(article => {
-        const item = document.createElement('div');
-        item.className = 'list-item';
-        item.innerHTML = `
-          <div class="list-item-main">
-            <div style="font-weight:600;font-size:0.9rem;">${article.title}</div>
-            <div style="font-size:0.8rem;color:#9ca3af;margin-top:0.15rem;">${article.source}</div>
-            <a href="${article.url}" target="_blank" rel="noopener noreferrer"
-               style="display:inline-block;margin-top:0.4rem;font-size:0.8rem;color:#60a5fa;text-decoration:none;">Open article</a>
-          </div>
-        `;
-        item.addEventListener('click', (e) => {
-          if (e.target && e.target.tagName === 'A') return;
-          window.open(article.url, '_blank');
-        });
-        target.appendChild(item);
-      });
-    };
-
-    buildList(videoList, LEARNING_ARTICLES.video || []);
-    buildList(cyberList, LEARNING_ARTICLES.cyber || []);
-
+  function renderPreview() {
+    if (!previewEl) return;
+    previewEl.innerHTML = '';
+    livePortfolio.clientHighlights.forEach(h => {
+      const row = document.createElement('div');
+      row.style = 'padding:6px 8px;border-bottom:1px solid #222;';
+      const quote = h.reviewText || h.description || '';
+      const by = h.clientName ? ` — ${h.clientName}` : '';
+      row.textContent = `${quote}${by}`;
+      previewEl.appendChild(row);
+    });
   }
 
-  function loadInvoices() {
-    api('/api/invoices')
-      .then(invs => {
-        invoicesListEl.innerHTML = '';
-        (invs || []).slice().reverse().forEach(inv => {
-          const clientName = inv.clientName || '';
-          const invoiceNumber = inv.projectId || inv.invoiceNumber || inv.id;
-          const total = (inv.summary && inv.summary.total) || inv.total || inv.amount || 0;
-          const currency = inv.currency || '';
-          const invoiceDate = inv.invoiceDate || (inv.createdAt || '').slice(0, 10);
+  renderList();
+  renderPreview();
 
-          const item = document.createElement('div');
-          item.className = 'list-item';
-          item.innerHTML = `
-            <div class="list-item-main">
-              <div style="font-weight:600;font-size:0.95rem;">Invoice #${invoiceNumber || ''}</div>
-              <div style="font-size:0.85rem;color:#e5e7eb;margin-top:0.15rem;">${clientName}</div>
-              <div style="font-size:0.8rem;color:#9ca3af;margin-top:0.25rem;">${invoiceDate || ''}</div>
-              <div style="font-size:0.9rem;color:#cbd5e1;margin-top:0.35rem;">
-                <span style="font-weight:600;">${currency}</span>
-                <span style="font-weight:600;">${total}</span>
-              </div>
-            </div>
-            <div class="list-item-actions">
-              <button style="padding:0.3rem 0.6rem;border-radius:6px;border:none;background:#3b82f6;color:#fff;font-size:0.75rem;" data-action="pdf">Download PDF</button>
-              <button style="padding:0.3rem 0.6rem;border-radius:6px;border:none;background:#ef4444;color:#fff;font-size:0.75rem;" data-action="delete">Delete</button>
-            </div>
-          `;
-          item.querySelectorAll('[data-action]').forEach(btn => {
-            const action = btn.getAttribute('data-action');
-            if (action === 'pdf') {
-              btn.addEventListener('click', () => {
-                downloadInvoicePdf(inv.id);
-              });
-            } else if (action === 'delete') {
-              btn.addEventListener('click', () => {
-                if (!confirm('Delete this invoice?')) return;
-                api('/api/invoices/' + inv.id, { method: 'DELETE' })
-                  .then(loadInvoices);
-              });
-            }
-          });
-          invoicesListEl.appendChild(item);
-        });
-      })
-      .catch(() => {
-        invoicesListEl.innerHTML = '<p style="color:#f87171;font-size:0.85rem;">Failed to load invoices.</p>';
-      });
+  if (addBtn && !addBtn._bound) {
+    addBtn._bound = true;
+    addBtn.addEventListener('click', () => {
+      livePortfolio.clientHighlights.push({ title: '', platform: '', link: '', reviewText: '', clientName: '' });
+      renderList(); renderPreview();
+    });
   }
 
-  function downloadInvoicePdf(id) {
-    fetch('/api/invoices/' + id + '/pdf', {
-      headers: authToken ? { 'Authorization': 'Bearer ' + authToken } : {}
-    })
-      .then(res => {
-        if (!res.ok) throw new Error('HTTP ' + res.status);
-        return res.blob();
-      })
-      .then(blob => {
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = id + '.pdf';
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-      })
-      .catch(() => alert('Failed to download invoice PDF.'));
+  if (saveBtn && !saveBtn._bound) {
+    saveBtn._bound = true;
+    saveBtn.addEventListener('click', async () => {
+      try {
+        const clone = { ...livePortfolio };
+        applyVirtualFieldsFromForm(clone);
+        await api('/api/portfolio', { method: 'PUT', json: clone });
+        alert('Reviews saved.');
+      } catch {
+        alert('Failed to save reviews. Please log in first.');
+      }
+    });
   }
+}
 
-  function handleCreateInvoiceClick() {
-    const data = collectInvoiceFormData();
-    if (!data) return;
-    api('/api/invoices', { method: 'POST', json: data })
-      .then(() => {
-        alert('Invoice created.');
-        try { buildInvoiceForm(); } catch (e) {
-          console && console.error && console.error('Failed to rebuild invoice form', e);
-        }
-        loadInvoices();
-      })
-      .catch(() => alert('Failed to create invoice.'));
-  }
+})(); // Close the IIFE
+    
 
-  const createInvoiceBtn = document.getElementById('create-invoice');
-  if (createInvoiceBtn) {
-    createInvoiceBtn.addEventListener('click', handleCreateInvoiceClick);
-  }
-
-  // Fallback: event delegation in case the button is re-rendered dynamically
-  document.addEventListener('click', (e) => {
-    const btn = e.target && e.target.closest ? e.target.closest('#create-invoice') : null;
-    if (!btn) return;
-    handleCreateInvoiceClick();
-  });
-})();
