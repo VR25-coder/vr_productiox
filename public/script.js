@@ -1365,9 +1365,84 @@ async function loadPortfolioContentFromJSON() {
             const list = document.querySelector('.client-highlights-list');
             if (list) {
                 list.innerHTML = '';
+
+                // Helper: infer platform name from explicit field or URL hostname
+                const getPlatformName = (item) => {
+                    const p = (item.platform || '').trim();
+                    if (p) return p;
+                    const raw = item.postUrl || item.link || '';
+                    try {
+                        const host = new URL(raw).hostname.replace(/^www\./, '');
+                        if (host.includes('instagram')) return 'Instagram';
+                        if (host.includes('youtube')) return 'YouTube';
+                        if (host.includes('google')) return 'Google';
+                        if (host.includes('fiverr')) return 'Fiverr';
+                        if (host.includes('upwork')) return 'Upwork';
+                        return host;
+                    } catch (e) {
+                        return '';
+                    }
+                };
+
+                // Helper: resolve a small platform icon (favicon) from the URL or known platform
+                const getPlatformIconUrl = (item) => {
+                    const raw = item.postUrl || item.link || '';
+                    try {
+                        const host = new URL(raw).hostname.replace(/^www\./, '');
+                        return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(host)}&sz=64`;
+                    } catch (e) {
+                        const p = String(item.platform || '').toLowerCase();
+                        const map = {
+                            instagram: 'https://www.google.com/s2/favicons?domain=instagram.com&sz=64',
+                            youtube: 'https://www.google.com/s2/favicons?domain=youtube.com&sz=64',
+                            google: 'https://www.google.com/s2/favicons?domain=google.com&sz=64',
+                            fiverr: 'https://www.google.com/s2/favicons?domain=fiverr.com&sz=64',
+                            upwork: 'https://www.google.com/s2/favicons?domain=upwork.com&sz=64'
+                        };
+                        return map[p] || '';
+                    }
+                };
+
+                // Helper: format URL for display
+                const formatUrlForDisplay = (raw) => {
+                    if (!raw) return '';
+                    try {
+                        const u = new URL(raw);
+                        const host = u.hostname.replace(/^www\./, '');
+                        const path = u.pathname.replace(/\/+$/, '');
+                        const prettyPath = path && path !== '/' ? path : '';
+                        return prettyPath ? `${host}${prettyPath}` : host;
+                    } catch {
+                        return raw;
+                    }
+                };
+
                 data.clientHighlights.forEach(item => {
                     const card = document.createElement('article');
                     card.className = 'client-highlight-card';
+
+                    const platformName = getPlatformName(item);
+                    const authorName = item.commentAuthor || item.clientName || item.author || '';
+                    const isInstagram = (platformName || '').toLowerCase().includes('instagram');
+
+                    // Platform badge with logo (top corner)
+                    const platformBadge = document.createElement('div');
+                    platformBadge.className = 'review-platform-badge';
+                    const icon = document.createElement('img');
+                    icon.className = 'review-platform-icon';
+                    icon.src = getPlatformIconUrl(item);
+                    icon.alt = platformName || 'Platform';
+                    icon.title = platformName || '';
+                    icon.style.width = '20px';
+                    icon.style.height = '20px';
+                    icon.style.borderRadius = '4px';
+                    icon.style.objectFit = 'contain';
+                    icon.onerror = () => {
+                        icon.style.display = 'none';
+                        platformBadge.textContent = platformName || 'Project';
+                    };
+                    platformBadge.appendChild(icon);
+                    card.appendChild(platformBadge);
 
                     const main = document.createElement('div');
                     main.className = 'client-highlight-main';
@@ -1378,27 +1453,29 @@ async function loadPortfolioContentFromJSON() {
 
                     const textEl = document.createElement('p');
                     textEl.className = 'testimonial-text';
-                    textEl.textContent = item.commentText || item.quote || '';
+                    const text = item.commentText || item.reviewText || item.description || item.quote || '';
+                    textEl.textContent = text;
+                    // Clamp review text to avoid overflow
+                    textEl.style.display = '-webkit-box';
+                    textEl.style.webkitBoxOrient = 'vertical';
+                    textEl.style.webkitLineClamp = '3';
+                    textEl.style.overflow = 'hidden';
+                    textEl.style.textOverflow = 'ellipsis';
 
-                    const authorEl = document.createElement('p');
-                    authorEl.className = 'testimonial-author';
-                    const authorName = item.commentAuthor || item.author || '';
-                    const platform = item.platform ? ` · ${item.platform}` : '';
-                    authorEl.textContent = authorName ? `– ${authorName}${platform}` : platform.replace(' · ', '');
-
+                    // Show URL under the comment (left-aligned, clickable)
+                    // Assemble main without inline URL
                     main.appendChild(quoteIcon);
                     main.appendChild(textEl);
-                    main.appendChild(authorEl);
 
                     const meta = document.createElement('div');
                     meta.className = 'client-highlight-meta';
 
-                    // Optional avatar / source thumbnail to make the review card feel more genuine
+                    // Optional avatar / source thumbnail
                     if (item.thumbnail) {
                         const avatar = document.createElement('img');
                         avatar.className = 'client-highlight-avatar';
                         avatar.src = item.thumbnail;
-                        const baseName = authorName || item.platform || 'Client';
+                        const baseName = authorName || platformName || 'Client';
                         avatar.alt = `${baseName} avatar`;
                         meta.appendChild(avatar);
                     }
@@ -1410,20 +1487,36 @@ async function loadPortfolioContentFromJSON() {
                         meta.appendChild(titleEl);
                     }
 
-                    const label = document.createElement('p');
-                    label.className = 'client-highlight-label';
-                    label.textContent = 'Verified project';
-                    meta.appendChild(label);
-
-                    if (item.postUrl) {
+                    // View Project button: show for any platform when URL exists, positioned bottom-left
+                    const url = item.postUrl || item.link || item.url || item.post_url || '';
+                    if (url) {
                         const link = document.createElement('a');
                         link.className = 'client-highlight-link';
-                        link.href = item.postUrl;
+                        link.href = url;
                         link.target = '_blank';
                         link.rel = 'noopener noreferrer';
-                        link.textContent = 'View post';
-                        meta.appendChild(link);
+                        link.textContent = 'View project';
+                        // Position bottom-left while keeping verified badge bottom-right
+                        link.style.cssText = 'position:absolute; left:8px; bottom:8px; border:none; padding:0; font-size:12px; text-decoration:underline;';
+                        card.appendChild(link);
                     }
+
+                    // Always show verified badge (bottom-right)
+                    card.style.position = 'relative';
+                    const verified = document.createElement('div');
+                    verified.className = 'verified-badge';
+                    verified.innerHTML = '<span class="verified-icon">✓</span><span class="verified-text">Verified client</span>';
+                    verified.style.cssText = 'position:absolute; right:8px; bottom:8px; border:none; padding:0; font-size:12px; display:flex; align-items:center; gap:6px; pointer-events:none;';
+                    card.appendChild(verified);
+
+                    // Single client name chip positioned just above the badge
+                    const clientNameChip = document.createElement('div');
+                    clientNameChip.className = 'client-name-chip';
+                    clientNameChip.textContent = authorName || 'Client';
+                    clientNameChip.style.cssText = 'position:absolute; right:8px; bottom:34px; border-radius:999px; padding:4px 10px; font-size:12px; background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.2); color:inherit; pointer-events:none;';
+                    card.appendChild(clientNameChip);
+
+                    // Removed full-card overlay: only the "View project" button opens the post.
 
                     card.appendChild(main);
                     card.appendChild(meta);
@@ -1438,53 +1531,57 @@ async function loadPortfolioContentFromJSON() {
                 setupClientHighlightsScrollHints(list);
             }
         } else if (Array.isArray(data.testimonials)) {
-            // Backwards-compatibility: if no clientHighlights, map testimonials into highlight cards
-            const list = document.querySelector('.client-highlights-list');
-            if (list) {
-                list.innerHTML = '';
-                data.testimonials.forEach(t => {
-                    const card = document.createElement('article');
-                    card.className = 'client-highlight-card';
+                // Backwards-compatibility: if no clientHighlights, map testimonials into highlight cards
+                const list = document.querySelector('.client-highlights-list');
+                if (list) {
+                    list.innerHTML = '';
+                    data.testimonials.forEach(t => {
+                        const card = document.createElement('article');
+                        card.className = 'client-highlight-card';
 
-                    const main = document.createElement('div');
-                    main.className = 'client-highlight-main';
+                        const main = document.createElement('div');
+                        main.className = 'client-highlight-main';
 
-                    const quoteIcon = document.createElement('div');
-                    quoteIcon.className = 'testimonial-quote';
-                    quoteIcon.textContent = '“';
+                        const quoteIcon = document.createElement('div');
+                        quoteIcon.className = 'testimonial-quote';
+                        quoteIcon.textContent = '“';
 
-                    const textEl = document.createElement('p');
-                    textEl.className = 'testimonial-text';
-                    textEl.textContent = t.quote || '';
+                        const textEl = document.createElement('p');
+                        textEl.className = 'testimonial-text';
+                        textEl.textContent = t.quote || '';
 
-                    const authorEl = document.createElement('p');
-                    authorEl.className = 'testimonial-author';
-                    authorEl.textContent = t.author ? `– ${t.author}` : '';
+                        const authorEl = document.createElement('p');
+                        authorEl.className = 'testimonial-author';
+                        authorEl.textContent = t.author ? `– ${t.author}` : '';
 
-                    main.appendChild(quoteIcon);
-                    main.appendChild(textEl);
-                    main.appendChild(authorEl);
+                        main.appendChild(quoteIcon);
+                        main.appendChild(textEl);
+                        main.appendChild(authorEl);
 
-                    const meta = document.createElement('div');
-                    meta.className = 'client-highlight-meta';
-                    const label = document.createElement('p');
-                    label.className = 'client-highlight-label';
-                    label.textContent = 'Verified project';
-                    meta.appendChild(label);
+                        const meta = document.createElement('div');
+                        meta.className = 'client-highlight-meta';
 
-                    card.appendChild(main);
-                    card.appendChild(meta);
+                        // Always show verified badge (bottom-right)
+                        card.style.position = 'relative';
+                        const verified = document.createElement('div');
+                        verified.className = 'verified-badge';
+                        verified.innerHTML = '<span class="verified-icon">✓</span><span class="verified-text">Verified client</span>';
+                        verified.style.cssText = 'position:absolute; right:8px; bottom:8px; border:none; padding:0; font-size:12px; display:flex; align-items:center; gap:6px; pointer-events:none;';
+                        card.appendChild(verified);
 
-                    list.appendChild(card);
+                        card.appendChild(main);
+                        card.appendChild(meta);
 
-                    if (window.observeRevealElement) {
-                        window.observeRevealElement(card);
-                    }
-                });
+                        list.appendChild(card);
 
-                setupClientHighlightsScrollHints(list);
+                        if (window.observeRevealElement) {
+                            window.observeRevealElement(card);
+                        }
+                    });
+
+                    setupClientHighlightsScrollHints(list);
+                }
             }
-        }
 
         // Project breakdown card
         if (Array.isArray(data.projectBreakdown)) {
